@@ -3,6 +3,8 @@
 A browser voice assistant that remembers what you tell it across visits and can
 check the weather. Talk to it in real time; no sign-up needed.
 
+## Deployment architecture
+
 ```mermaid
 flowchart LR
     GH["GitHub<br/>main branch"]
@@ -22,8 +24,8 @@ flowchart LR
     Neon[("Neon Postgres<br/>managed")]
     Weather["Open-Meteo / MET Norway"]
 
-    GH -- "LK agent deploy" --> Build
-    GH -- "push > auto deploy" --> Web
+    GH -- "lk agent deploy (CLI)" --> Build
+    GH -- "Git integration: push to main" --> Web
     Client <-- "WebRTC" --> Rooms
     Client -- "HTTPS" --> Web
     Build --> Workers
@@ -225,7 +227,7 @@ RUN_WEATHER_INTEGRATION=1 uv run pytest tests/test_weather_integration.py   # li
 
 Three managed services, and only the agent is a Docker image:
 
-See the deployment diagram at the top.
+See [Deployment architecture](#deployment-architecture).
 
 **Why this split:** the web app is a standard Next.js app, so Vercel builds and
 hosts it directly, with no image needed. The agent is a long-running Python
