@@ -249,9 +249,8 @@ Install the [LiveKit CLI](https://docs.livekit.io/home/cli/) and sign in with
 
 ```sh
 cd agent
-lk agent create --secrets-file .env   # first time: builds the Dockerfile, writes livekit.toml
+lk agent create --secrets-file .env --ignore-empty-secrets  # first deployment
 lk agent deploy                       # later updates
-lk agent logs                         # check it started
 ```
 
 The secrets file must include `DATABASE_URL` and the `APP_NAME` and
@@ -277,6 +276,32 @@ Every push to `main` redeploys the web app. Redeploy the agent with
 - Open the Vercel URL, start a call, save a fact, refresh, and confirm it's remembered.
 - In the LiveKit Cloud dashboard, confirm recording and session transcripts are off,
   so voice and conversations aren't kept.
+
+### Monitoring
+
+From the agent directory, view cloud worker logs:
+
+```sh
+cd agent
+lk agent logs
+```
+
+Use these logs to check startup and investigate session or tool failures.
+
+### Continuous deployment
+
+Vercel builds and deploys `web/` through its Git integration on merges to `main`.
+GitHub Actions runs backend tests/lint and frontend lint/build on pull requests.
+Agent changes pushed to `main` deploy to LiveKit after both check jobs pass;
+you can also run the workflow manually on `main`.
+
+Add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in GitHub repository
+**Settings → Secrets and variables → Actions**. Application secrets already
+uploaded to LiveKit stay there; `.env` is never included in the workflow.
+The committed `agent/livekit.toml` selects the existing agent deployment.
+
+To block merges on failing checks, require **Backend checks** and **Frontend checks**
+in the repository's branch rules for `main`. This is a separate GitHub setting.
 
 ## Limits
 
