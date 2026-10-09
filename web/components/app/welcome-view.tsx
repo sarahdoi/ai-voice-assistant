@@ -29,7 +29,7 @@ export const WelcomeView = ({
           Hi, I’m {APP_NAME}
         </h1>
         <p className="text-muted-foreground max-w-prose pt-2 leading-6">
-          Your personal voice assistant
+          Personalized voice assistant
         </p>
 
         {problem && (
