@@ -1,11 +1,13 @@
 """Open-Meteo adapter. Returns source data, never generated weather claims."""
 
 import asyncio
+import json
 import logging
 import math
 import re
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime
-from typing import Protocol
+from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -13,17 +15,20 @@ import httpx
 from sarjy.domain.results import ErrorCode, ToolResult
 
 logger = logging.getLogger(__name__)
+CURRENT_FIELDS = ("temperature_2m", "precipitation", "wind_speed_10m")
+DAILY_FIELDS = ("temperature_2m_max", "temperature_2m_min", "precipitation_probability_max")
+MAX_RESPONSE_BYTES = 256 * 1024
 
 
-def number(value):
+def number(value: object) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
 
 
-def validate_forecast(data):
+def validate_forecast(data: dict[str, Any]) -> tuple[dict, dict]:
     current, daily = data["current"], data["daily"]
     datetime.fromisoformat(current["time"])
     ZoneInfo(data["timezone"])
-    for field in ("temperature_2m", "precipitation", "wind_speed_10m"):
+    for field in CURRENT_FIELDS:
         if not number(current[field]) or not isinstance(data["current_units"][field], str):
             raise ValueError("Invalid current field")
     days = daily["time"]
@@ -32,7 +37,7 @@ def validate_forecast(data):
     dates = [date.fromisoformat(day) for day in days]
     if (dates[1] - dates[0]).days != 1:
         raise ValueError("Nonconsecutive dates")
-    for field in ("temperature_2m_max", "temperature_2m_min", "precipitation_probability_max"):
+    for field in DAILY_FIELDS:
         values = daily[field]
         if not isinstance(values, list) or len(values) != 2:
             raise ValueError("Invalid daily array")
@@ -61,7 +66,7 @@ class OpenMeteoWeatherService:
         geocoding_url: str,
         forecast_url: str,
         fault: bool = False,
-        sleep=asyncio.sleep,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.client = client
         self.geocoding_url = geocoding_url
@@ -77,11 +82,9 @@ class OpenMeteoWeatherService:
                     response.raise_for_status()
                     body = bytearray()
                     async for chunk in response.aiter_bytes():
-                        if len(body) + len(chunk) > 262144:
+                        if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
                             raise ValueError("Weather response too large")
                         body.extend(chunk)
-                    import json
-
                     data = json.loads(body)
                     if not isinstance(data, dict):
                         raise ValueError("Expected an object")
@@ -93,6 +96,49 @@ class OpenMeteoWeatherService:
                 if attempt or not retryable:
                     raise
                 await self.sleep(0.1)
+
+    async def _resolve_place(
+        self, city: str, country_code: str | None, region: str | None
+    ) -> dict | ToolResult:
+        params = {"name": city, "count": 10, "language": "en", "format": "json"}
+        if country_code:
+            params["countryCode"] = country_code.upper()
+        geocoding = await self._get(self.geocoding_url, params)
+        places = geocoding.get("results", [])
+        if not isinstance(places, list):
+            raise ValueError("Invalid places")
+        for place in places:
+            if not isinstance(place, dict) or not isinstance(place.get("name"), str):
+                raise ValueError("Invalid place")
+            if not number(place.get("latitude")) or not -90 <= place["latitude"] <= 90:
+                raise ValueError("Invalid latitude")
+            if not number(place.get("longitude")) or not -180 <= place["longitude"] <= 180:
+                raise ValueError("Invalid longitude")
+        if country_code:
+            places = [p for p in places if p.get("country_code") == country_code]
+        if not places:
+            return ToolResult.failure(
+                ErrorCode.NOT_FOUND, "No matching city. Ask for another name."
+            )
+        # Prefer exact names, but never silently pick among equally named cities.
+        exact = [p for p in places if p["name"].casefold() == city.casefold()]
+        places = exact or places
+        if region:
+            places = [p for p in places if p.get("admin1", "").casefold() == region.casefold()]
+            if not places:
+                return ToolResult.failure(ErrorCode.NOT_FOUND, "No matching city in that region.")
+        if len(places) > 1:
+            candidates = [
+                {k: p.get(k) for k in ("name", "admin1", "country", "country_code")}
+                for p in places[:5]
+            ]
+            return ToolResult(
+                ok=False,
+                error_code=ErrorCode.AMBIGUOUS,
+                data={"candidates": candidates},
+                message="Ask for city, country or state/region. Do not report weather yet.",
+            )
+        return places[0]
 
     async def get_forecast(
         self, city: str, country_code: str | None = None, region: str | None = None
@@ -109,54 +155,16 @@ class OpenMeteoWeatherService:
                 ErrorCode.UPSTREAM_ERROR, "Weather is temporarily unavailable."
             )
         try:
-            params = {"name": city, "count": 10, "language": "en", "format": "json"}
-            if country_code:
-                params["countryCode"] = country_code.upper()
-            geocoding = await self._get(self.geocoding_url, params)
-            places = geocoding.get("results", [])
-            if not isinstance(places, list):
-                raise ValueError("Invalid places")
-            for place in places:
-                if not isinstance(place, dict) or not isinstance(place.get("name"), str):
-                    raise ValueError("Invalid place")
-                if not number(place.get("latitude")) or not -90 <= place["latitude"] <= 90:
-                    raise ValueError("Invalid latitude")
-                if not number(place.get("longitude")) or not -180 <= place["longitude"] <= 180:
-                    raise ValueError("Invalid longitude")
-            if country_code:
-                places = [p for p in places if p.get("country_code") == country_code]
-            if not places:
-                return ToolResult.failure(
-                    ErrorCode.NOT_FOUND, "No matching city. Ask for another name."
-                )
-            # Prefer exact names, but never silently pick among equally named cities.
-            exact = [p for p in places if p["name"].casefold() == city.casefold()]
-            places = exact or places
-            if region:
-                places = [p for p in places if p.get("admin1", "").casefold() == region.casefold()]
-                if not places:
-                    return ToolResult.failure(
-                        ErrorCode.NOT_FOUND, "No matching city in that region."
-                    )
-            if len(places) > 1:
-                candidates = [
-                    {k: p.get(k) for k in ("name", "admin1", "country", "country_code")}
-                    for p in places[:5]
-                ]
-                return ToolResult(
-                    ok=False,
-                    error_code=ErrorCode.AMBIGUOUS,
-                    data={"candidates": candidates},
-                    message="Ask for city, country or state/region. Do not report weather yet.",
-                )
-            place = places[0]
+            place = await self._resolve_place(city, country_code, region)
+            if isinstance(place, ToolResult):
+                return place
             forecast = await self._get(
                 self.forecast_url,
                 {
                     "latitude": place["latitude"],
                     "longitude": place["longitude"],
-                    "current": "temperature_2m,precipitation,wind_speed_10m",
-                    "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+                    "current": ",".join(CURRENT_FIELDS),
+                    "daily": ",".join(DAILY_FIELDS),
                     "timezone": "auto",
                     "forecast_days": 2,
                 },
@@ -197,7 +205,9 @@ class FallbackWeatherService:
     def __init__(self, primary: WeatherService, secondary: WeatherService) -> None:
         self.primary, self.secondary = primary, secondary
 
-    async def get_forecast(self, city, country_code=None, region=None) -> ToolResult:
+    async def get_forecast(
+        self, city: str, country_code: str | None = None, region: str | None = None
+    ) -> ToolResult:
         result = await self.primary.get_forecast(city, country_code, region)
         if result.error_code in (ErrorCode.UPSTREAM_TIMEOUT, ErrorCode.UPSTREAM_ERROR):
             return await self.secondary.get_forecast(city, country_code, region)
