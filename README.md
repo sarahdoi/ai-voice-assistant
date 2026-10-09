@@ -60,3 +60,13 @@ The initial SQL schema uses hard deletion; it is intended for a fresh database.
 
 Frontend source: https://github.com/livekit-examples/agent-starter-react
 LiveKit setup: https://docs.livekit.io/agents/start/voice-ai/
+
+## Voice setup validation
+
+On 9 October 2026, the local `sarjy` worker registered with LiveKit Cloud and
+Sarah confirmed a working spoken conversation through Agent Console. This
+validates the default hosted pipeline voice loop, not persistence or deployment.
+Gemini Live remains unverified. Configuration tests ensure a missing Gemini key
+and the unimplemented stretch provider fail explicitly rather than falling back.
+Keep application services provider-independent; add adapters only where a tested
+provider requires them. A configuration switch alone does not prove portability.
