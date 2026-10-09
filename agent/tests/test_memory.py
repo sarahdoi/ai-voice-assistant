@@ -1,10 +1,11 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import asyncpg
 import pytest
 
 from sarjy.domain.results import ErrorCode
-from sarjy.services.memory import PostgresMemoryService
+from sarjy.services.memory import DeferredMemoryService, PostgresMemoryService
 
 
 @pytest.mark.parametrize(
@@ -76,3 +77,36 @@ async def test_fault_injection_does_not_write():
     result = await PostgresMemoryService(pool, fault_write=True).remember("u", "color", "teal")
     assert result.error_code == ErrorCode.STORAGE_ERROR
     pool.fetch.assert_not_called()
+
+
+async def _pool_after(delay: float, pool):
+    await asyncio.sleep(delay)
+    return pool
+
+
+async def test_deferred_memory_waits_for_connection_then_delegates():
+    pool = AsyncMock()
+    pool.fetch.return_value = [{"key": "favorite_color", "value": "teal"}]
+    memory = DeferredMemoryService(_pool_after(0.01, pool))
+    result = await memory.recall("user-a", "favorite_color")
+    assert result.ok and result.data["memories"][0]["value"] == "teal"
+    assert pool.fetch.call_args.args[1] == "user-a"
+
+
+async def test_deferred_memory_reports_failed_connection_honestly():
+    async def fail():
+        raise OSError("database unreachable")
+
+    memory = DeferredMemoryService(fail())
+    result = await memory.remember("user-a", "favorite_color", "teal")
+    assert not result.ok and result.error_code is ErrorCode.STORAGE_ERROR
+
+
+async def test_interrupted_tool_call_does_not_cancel_connection():
+    pool = AsyncMock()
+    pool.fetch.return_value = []
+    memory = DeferredMemoryService(_pool_after(0.05, pool))
+    call = asyncio.create_task(memory.recall("user-a"))
+    await asyncio.sleep(0.01)
+    call.cancel()  # user barged in mid-call
+    assert (await memory.recall("user-a")).ok  # the shared connection survived

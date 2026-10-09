@@ -1,11 +1,14 @@
 """Persistent facts. No voice SDK dependencies; every query is user-scoped."""
 
+import asyncio
 import re
+from collections.abc import Awaitable
 from typing import Protocol
 
 import asyncpg
 
 from sarjy.domain.results import ErrorCode, ToolResult
+from sarjy.policy import rule_category
 
 
 class MemoryService(Protocol):
@@ -13,6 +16,8 @@ class MemoryService(Protocol):
     async def recall(self, user_id: str, key: str | None = None) -> ToolResult: ...
     async def correct(self, user_id: str, key: str, new_value: str) -> ToolResult: ...
     async def forget(self, user_id: str, key: str) -> ToolResult: ...
+    async def mark_seen(self, user_id: str) -> ToolResult: ...
+    async def delete_inactive(self, days: int) -> ToolResult: ...
 
 
 class PostgresMemoryService:
@@ -46,6 +51,11 @@ class PostgresMemoryService:
             return ToolResult.failure(
                 ErrorCode.REFUSED_SENSITIVE, "Do not save credentials or IDs."
             )
+        # A "fact" that is really an instruction would be read back into the prompt later.
+        if rule_category(value) is not None:
+            return ToolResult.failure(
+                ErrorCode.REFUSED_UNSAFE, "Not saved: that is an instruction, not a fact."
+            )
         return None
 
     async def remember(self, user_id: str, key: str, value: str) -> ToolResult:
@@ -54,7 +64,8 @@ class PostgresMemoryService:
             return invalid
         return await self._query(
             "INSERT INTO memories (user_id, key, value) VALUES ($1, $2, $3) "
-            "ON CONFLICT (user_id, key) DO UPDATE SET value=EXCLUDED.value, updated_at=now() "
+            "ON CONFLICT (user_id, key) DO UPDATE "
+            "SET value=EXCLUDED.value, updated_at=now(), last_seen_at=now() "
             "RETURNING key, value",
             user_id,
             key,
@@ -79,7 +90,8 @@ class PostgresMemoryService:
         if invalid:
             return invalid
         result = await self._query(
-            "UPDATE memories SET value=$3, updated_at=now() WHERE user_id=$1 AND key=$2 "
+            "UPDATE memories SET value=$3, updated_at=now(), last_seen_at=now() "
+            "WHERE user_id=$1 AND key=$2 "
             "RETURNING key, value",
             user_id,
             key,
@@ -101,6 +113,91 @@ class PostgresMemoryService:
             return ToolResult.success({"deleted": bool(result.data["memories"]), "key": key})
         return result
 
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        """Record that this user started a call, so retention keeps their facts."""
+        return await self._execute(
+            "UPDATE memories SET last_seen_at=now() WHERE user_id=$1", user_id
+        )
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        """Delete every fact of users who have not started a call for `days` days."""
+        return await self._execute(
+            "DELETE FROM memories WHERE last_seen_at < now() - make_interval(days => $1)", days
+        )
+
+    async def _execute(self, sql: str, *args: str | int) -> ToolResult:
+        """Run a housekeeping write and report how many rows it touched."""
+        if self.fault_write:
+            return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory write failed.")
+        try:
+            status = await self.pool.execute(sql, *args)  # e.g. "DELETE 3"
+        except (asyncpg.PostgresError, OSError, TimeoutError):
+            return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory is unavailable.")
+        return ToolResult.success({"rows": int(status.rsplit(" ", 1)[-1])})
+
+
+class DeferredMemoryService:
+    """Starts connecting at once, so a sleeping database wakes during the greeting.
+
+    Tool calls wait for the connection only if it is not ready yet. A failed
+    connection is reported honestly as unavailable storage, never as success.
+    """
+
+    def __init__(self, connect: Awaitable[asyncpg.Pool], *, fault_write: bool = False) -> None:
+        self._task: asyncio.Future[asyncpg.Pool] = asyncio.ensure_future(connect)
+        self._fault_write = fault_write
+        self._service: PostgresMemoryService | None = None
+
+    async def _ready(self) -> PostgresMemoryService | ToolResult:
+        if self._service is None:
+            try:
+                # shield: an interrupted tool call must not cancel the shared connection.
+                pool = await asyncio.shield(self._task)
+            except (asyncpg.PostgresError, OSError, TimeoutError, ValueError):
+                return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory is unavailable.")
+            self._service = PostgresMemoryService(pool, fault_write=self._fault_write)
+        return self._service
+
+    async def remember(self, user_id: str, key: str, value: str) -> ToolResult:
+        service = await self._ready()
+        return (
+            service
+            if isinstance(service, ToolResult)
+            else await service.remember(user_id, key, value)
+        )
+
+    async def recall(self, user_id: str, key: str | None = None) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.recall(user_id, key)
+
+    async def correct(self, user_id: str, key: str, new_value: str) -> ToolResult:
+        service = await self._ready()
+        return (
+            service
+            if isinstance(service, ToolResult)
+            else await service.correct(user_id, key, new_value)
+        )
+
+    async def forget(self, user_id: str, key: str) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.forget(user_id, key)
+
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.mark_seen(user_id)
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.delete_inactive(days)
+
+    async def aclose(self) -> None:
+        """Close the pool, or stop a connection still in progress."""
+        if not self._task.done():
+            self._task.cancel()
+            return
+        if not self._task.cancelled() and self._task.exception() is None:
+            await self._task.result().close()
+
 
 class NotImplementedMemoryService:
     """Honest fallback when no database is configured."""
@@ -116,3 +213,9 @@ class NotImplementedMemoryService:
 
     async def forget(self, user_id: str, key: str) -> ToolResult:
         return await self.remember(user_id, key, "")
+
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        return await self.remember(user_id, "", "")
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        return await self.remember("", "", "")
