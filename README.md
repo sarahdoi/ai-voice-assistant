@@ -1,5 +1,7 @@
 # Voice Assistant with Memory
 
+[Live demo](https://ai-voice-assistant-pi-one.vercel.app/)
+
 A browser voice assistant that remembers what you tell it across visits and can
 check the weather. Talk to it in real time; no sign-up needed.
 
@@ -251,9 +253,8 @@ Install the [LiveKit CLI](https://docs.livekit.io/home/cli/) and sign in with
 
 ```sh
 cd agent
-lk agent create --secrets-file .env   # first time: builds the Dockerfile, writes livekit.toml
+lk agent create --secrets-file .env --ignore-empty-secrets  # first deployment
 lk agent deploy                       # later updates
-lk agent logs                         # check it started
 ```
 
 The secrets file must include `DATABASE_URL` and the `APP_NAME` and
@@ -279,6 +280,43 @@ Every push to `main` redeploys the web app. Redeploy the agent with
 - Open the Vercel URL, start a call, save a fact, refresh, and confirm it's remembered.
 - In the LiveKit Cloud dashboard, confirm recording and session transcripts are off,
   so voice and conversations aren't kept.
+
+### Token rate limiting
+
+Configured in Vercel Firewall (outside this repository): `POST /api/token` is
+limited to **10 requests per 60 seconds per IP**, returning **429** when exceeded.
+This limits new session requests, including reconnects; it does not end active
+calls. People sharing a public IP share the limit. Configure the same rule if
+moving the app to a new Vercel project.
+
+The frontend shows a retry message when starting a call fails. The firewall
+rule still needs a live check to confirm excess requests receive 429.
+
+### Monitoring
+
+From the agent directory, view cloud worker logs:
+
+```sh
+cd agent
+lk agent logs
+```
+
+Use these logs to check startup and investigate session or tool failures.
+
+### Continuous deployment
+
+Vercel builds and deploys `web/` through its Git integration on merges to `main`.
+GitHub Actions runs backend tests/lint and frontend lint/build on pull requests.
+Agent changes pushed to `main` deploy to LiveKit after both check jobs pass;
+you can also run the workflow manually on `main`.
+
+Add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in GitHub repository
+**Settings → Secrets and variables → Actions**. Application secrets already
+uploaded to LiveKit stay there; `.env` is never included in the workflow.
+The committed `agent/livekit.toml` selects the existing agent deployment.
+
+To block merges on failing checks, require **Backend checks** and **Frontend checks**
+in the repository's branch rules for `main`. This is a separate GitHub setting.
 
 ## Limits
 
