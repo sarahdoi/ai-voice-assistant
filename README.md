@@ -20,7 +20,8 @@ uv run python -m sarjy.agent dev
 ```
 
 Test in LiveKit Agent Console with agent name `sarjy`.
-The default voice pipeline uses LiveKit Inference. Weather is not implemented yet.
+The default voice pipeline uses LiveKit Inference. Weather uses Open-Meteo
+for current conditions and today/tomorrow forecasts.
 
 ## Tests
 

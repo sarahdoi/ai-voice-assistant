@@ -3,12 +3,13 @@
 import logging
 
 import asyncpg
+import httpx
 from dotenv import load_dotenv
 from livekit.agents import AgentServer, JobContext, cli, room_io
 
 from sarjy.config import get_settings
 from sarjy.services.memory import NotImplementedMemoryService, PostgresMemoryService
-from sarjy.services.weather import NotImplementedWeatherService
+from sarjy.services.weather import OpenMeteoWeatherService
 from sarjy.tools import SarjyAgent
 from sarjy.voice.factory import build_session
 
@@ -44,11 +45,13 @@ async def entrypoint(ctx: JobContext) -> None:
         except (asyncpg.PostgresError, OSError, TimeoutError):
             logger.warning("Database connection unavailable; memory tools will report unavailable")
 
+    weather_client = httpx.AsyncClient(timeout=settings.weather_timeout_s)
+    ctx.add_shutdown_callback(weather_client.aclose)
     session = build_session(settings)
     agent = SarjyAgent(
         user_id=user_id,
         memory=memory,
-        weather=NotImplementedWeatherService(),
+        weather=OpenMeteoWeatherService(weather_client, fault=settings.fault_weather),
     )
     await session.start(
         agent=agent,
