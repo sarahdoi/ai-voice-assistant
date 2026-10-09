@@ -8,15 +8,15 @@ passwords and connection strings are not.
 
 ## Live configuration
 
-| What                  | Value     |
-| --------------------- | --------- |
-| Web URL               | _pending_ |
-| Vercel project        | _pending_ |
-| LiveKit Cloud project | _pending_ |
-| Agent ID / region     | _pending_ |
-| Neon region           | _pending_ |
-| Deployed commit       | _pending_ |
-| Deployed on           | _pending_ |
+| What | Value |
+| --- | --- |
+| Web URL | [Live demo](https://ai-voice-assistant-pi-one.vercel.app/) |
+| Vercel project | [sarahdoi / ai-voice-assistant](https://vercel.com/sarahdoi/ai-voice-assistant) |
+| LiveKit Cloud project | Sarjy (`sarjy-a0pso6kv`) |
+| Agent ID / region | `CA_aMoDfRqNEG7a` / `us-east` |
+| Neon region | AWS US East (Ohio), `us-east-2` |
+| Deployed commit | Initial agent deployment: `88ba64e`; current agent and web revisions: check deployment dashboards |
+| Deployed on | Initial agent deployment: 10 October 2026 (Asia/Riyadh); current deployment dates: check dashboards |
 
 ## Steps
 
