@@ -277,6 +277,17 @@ Every push to `main` redeploys the web app. Redeploy the agent with
 - In the LiveKit Cloud dashboard, confirm recording and session transcripts are off,
   so voice and conversations aren't kept.
 
+### Token rate limiting
+
+Configured in Vercel Firewall (outside this repository): `POST /api/token` is
+limited to **10 requests per 60 seconds per IP**, returning **429** when exceeded.
+This limits new session requests, including reconnects; it does not end active
+calls. People sharing a public IP share the limit. Configure the same rule if
+moving the app to a new Vercel project.
+
+The frontend shows a retry message when starting a call fails. The firewall
+rule still needs a live check to confirm excess requests receive 429.
+
 ### Monitoring
 
 From the agent directory, view cloud worker logs:
