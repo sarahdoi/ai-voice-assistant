@@ -4,11 +4,5 @@ import { App } from '@/components/app/app';
 // identity. There is deliberately no fallback to another token server: a missing
 // configuration should fail loudly, not connect visitors to someone else's agent.
 export default function Page() {
-  return (
-    <App
-      tokenEndpoint="/api/token"
-      agentName={process.env.AGENT_NAME ?? 'sarjy'}
-      isVideoInputSupported={false}
-    />
-  );
+  return <App tokenEndpoint="/api/token" agentName={process.env.AGENT_NAME ?? 'sarjy'} />;
 }

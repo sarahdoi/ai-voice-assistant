@@ -33,7 +33,7 @@ export function useAgentErrors() {
       const reasons = agent.failureReasons;
 
       toastAlert({
-        title: 'Session ended',
+        title: 'Sarjy disconnected',
         description: (
           <>
             {reasons.length > 1 && (
@@ -44,17 +44,7 @@ export function useAgentErrors() {
               </ul>
             )}
             {reasons.length === 1 && <p className="w-full">{reasons[0]}</p>}
-            <p className="w-full">
-              <a
-                target="_blank"
-                rel="noopener noreferrer"
-                href="https://docs.livekit.io/agents/start/voice-ai/"
-                className="whitespace-nowrap underline"
-              >
-                See quickstart guide
-              </a>
-              .
-            </p>
+            <p className="w-full">Please start a new call.</p>
           </>
         ),
       });

@@ -1,6 +1,8 @@
 """Persistent facts. No voice SDK dependencies; every query is user-scoped."""
 
+import asyncio
 import re
+from collections.abc import Awaitable
 from typing import Protocol
 
 import asyncpg
@@ -100,6 +102,61 @@ class PostgresMemoryService:
         if result.ok:
             return ToolResult.success({"deleted": bool(result.data["memories"]), "key": key})
         return result
+
+
+class DeferredMemoryService:
+    """Starts connecting at once, so a sleeping database wakes during the greeting.
+
+    Tool calls wait for the connection only if it is not ready yet. A failed
+    connection is reported honestly as unavailable storage, never as success.
+    """
+
+    def __init__(self, connect: Awaitable[asyncpg.Pool], *, fault_write: bool = False) -> None:
+        self._task: asyncio.Future[asyncpg.Pool] = asyncio.ensure_future(connect)
+        self._fault_write = fault_write
+        self._service: PostgresMemoryService | None = None
+
+    async def _ready(self) -> PostgresMemoryService | ToolResult:
+        if self._service is None:
+            try:
+                # shield: an interrupted tool call must not cancel the shared connection.
+                pool = await asyncio.shield(self._task)
+            except (asyncpg.PostgresError, OSError, TimeoutError, ValueError):
+                return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory is unavailable.")
+            self._service = PostgresMemoryService(pool, fault_write=self._fault_write)
+        return self._service
+
+    async def remember(self, user_id: str, key: str, value: str) -> ToolResult:
+        service = await self._ready()
+        return (
+            service
+            if isinstance(service, ToolResult)
+            else await service.remember(user_id, key, value)
+        )
+
+    async def recall(self, user_id: str, key: str | None = None) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.recall(user_id, key)
+
+    async def correct(self, user_id: str, key: str, new_value: str) -> ToolResult:
+        service = await self._ready()
+        return (
+            service
+            if isinstance(service, ToolResult)
+            else await service.correct(user_id, key, new_value)
+        )
+
+    async def forget(self, user_id: str, key: str) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.forget(user_id, key)
+
+    async def aclose(self) -> None:
+        """Close the pool, or stop a connection still in progress."""
+        if not self._task.done():
+            self._task.cancel()
+            return
+        if not self._task.cancelled() and self._task.exception() is None:
+            await self._task.result().close()
 
 
 class NotImplementedMemoryService:

@@ -1,13 +1,14 @@
 'use client';
 
-import { useTheme } from 'next-themes';
+import { useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useAgent, useSessionContext } from '@livekit/components-react';
-import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
+import { useSessionContext } from '@livekit/components-react';
 import { WelcomeView } from '@/components/app/welcome-view';
+import { SarjySessionView } from '@/components/sarjy/sarjy-session-view';
+import { MICROPHONE_MESSAGES, checkMicrophone, microphoneErrorStatus } from '@/lib/microphone';
 
 const MotionWelcomeView = motion.create(WelcomeView);
-const MotionSessionView = motion.create(AgentSessionView_01);
+const MotionSessionView = motion.create(SarjySessionView);
 
 const VIEW_MOTION_PROPS = {
   variants: {
@@ -27,42 +28,50 @@ const VIEW_MOTION_PROPS = {
   },
 };
 
-interface ViewControllerProps {
-  isVideoInputSupported: boolean;
-}
+type Problem = { title: string; description: string };
 
-export function ViewController({ isVideoInputSupported }: ViewControllerProps) {
+const START_FAILED: Problem = {
+  title: 'Couldn’t start the call',
+  description: 'Sarjy may be busy or offline. Please try again in a moment.',
+};
+
+export function ViewController() {
   const { isConnected, start } = useSessionContext();
-  const agent = useAgent();
-  const { resolvedTheme } = useTheme();
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  // Check the microphone first so a blocked mic gets a clear message, not a crash.
+  const startCall = useCallback(async () => {
+    setStarting(true);
+    setProblem(null);
+    try {
+      const mic = await checkMicrophone();
+      if (mic !== 'ok') {
+        setProblem(MICROPHONE_MESSAGES[mic]);
+        return;
+      }
+      await start();
+    } catch (error) {
+      const mic = microphoneErrorStatus(error);
+      setProblem(mic === 'unavailable' ? START_FAILED : MICROPHONE_MESSAGES[mic]);
+    } finally {
+      setStarting(false);
+    }
+  }, [start]);
 
   return (
     <AnimatePresence mode="wait">
-      {/* Welcome view */}
       {!isConnected && (
         <MotionWelcomeView
           key="welcome"
           {...VIEW_MOTION_PROPS}
-          startButtonText="Start call"
-          onStartCall={start}
+          startButtonText="Talk to Sarjy"
+          onStartCall={startCall}
+          problem={problem}
+          starting={starting}
         />
       )}
-      {/* Session view */}
-      {isConnected && (
-        <MotionSessionView
-          key="session-view"
-          {...VIEW_MOTION_PROPS}
-          preConnectMessage={
-            agent.isConnected ? 'Agent is listening, ask it a question' : 'Waiting for agent'
-          }
-          supportsChatInput={true}
-          supportsVideoInput={isVideoInputSupported}
-          supportsScreenShare={isVideoInputSupported}
-          isPreConnectBufferEnabled={true}
-          themeMode={resolvedTheme === 'dark' ? 'dark' : 'light'}
-          className="fixed inset-0"
-        />
-      )}
+      {isConnected && <MotionSessionView key="session-view" {...VIEW_MOTION_PROPS} />}
     </AnimatePresence>
   );
 }

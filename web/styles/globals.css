@@ -12,8 +12,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #002cf2;
-  --primary-hover: color-mix(in srgb, #002cf2 80%, #000);
+  /* Sarjy cyan, darkened in light mode so white button text stays readable. */
+  --primary: #0e7490;
+  --primary-hover: color-mix(in srgb, #0e7490 80%, #000);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -122,5 +123,64 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Sarjy orb: a slow breath while listening. */
+@keyframes sarjy-breathe {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.04;
+  }
+}
+
+/* Sarjy orb: ripples flowing outward while the user waits. */
+@keyframes sarjy-ripple {
+  from {
+    scale: 1;
+    opacity: 0.6;
+  }
+  to {
+    scale: 2.1;
+    opacity: 0;
+  }
+}
+
+/* Sarjy buddy: an occasional blink. */
+@keyframes sarjy-blink {
+  0%,
+  90%,
+  100% {
+    scale: 1 1;
+  }
+  94% {
+    scale: 1 0.1;
+  }
+}
+
+/* Sarjy orb: eyes glancing side to side during a lookup. */
+@keyframes sarjy-glance {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  30% {
+    translate: -12% 0;
+  }
+  70% {
+    translate: 12% 0;
+  }
+}
+
+/* Sarjy backdrop: slow drifting glows behind the page. */
+@keyframes sarjy-drift {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
   }
 }
