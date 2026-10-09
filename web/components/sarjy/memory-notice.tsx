@@ -29,12 +29,21 @@ function content(notice: Notice) {
     case 'refused':
       return {
         icon: <ProhibitIcon weight="bold" className="text-amber-400" />,
-        text: 'Not saved: sensitive information',
+        text: 'Not saved',
+      };
+    case 'uncertain':
+      return {
+        icon: <WarningIcon weight="bold" className="text-amber-400" />,
+        text: 'Couldn’t confirm the change',
       };
     case 'failed':
       return {
         icon: <WarningIcon weight="bold" className="text-amber-400" />,
-        text: 'Couldn’t save right now',
+        text: {
+          saved: 'Couldn’t save',
+          corrected: 'Couldn’t update',
+          forgotten: 'Couldn’t forget',
+        }[notice.action],
       };
   }
 }
@@ -49,7 +58,7 @@ export function MemoryNotice({ notice }: { notice: Notice | null }) {
   useEffect(() => {
     if (!notice) return;
     setVisible(notice);
-    const problem = notice.op === 'refused' || notice.op === 'failed';
+    const problem = notice.op === 'refused' || notice.op === 'failed' || notice.op === 'uncertain';
     const timer = setTimeout(() => setVisible(null), problem ? VISIBLE_MS.problem : VISIBLE_MS.ok);
     return () => clearTimeout(timer);
   }, [notice]);

@@ -8,6 +8,7 @@ from typing import Protocol
 import asyncpg
 
 from sarjy.domain.results import ErrorCode, ToolResult
+from sarjy.policy import rule_category
 
 
 class MemoryService(Protocol):
@@ -15,6 +16,8 @@ class MemoryService(Protocol):
     async def recall(self, user_id: str, key: str | None = None) -> ToolResult: ...
     async def correct(self, user_id: str, key: str, new_value: str) -> ToolResult: ...
     async def forget(self, user_id: str, key: str) -> ToolResult: ...
+    async def mark_seen(self, user_id: str) -> ToolResult: ...
+    async def delete_inactive(self, days: int) -> ToolResult: ...
 
 
 class PostgresMemoryService:
@@ -48,6 +51,11 @@ class PostgresMemoryService:
             return ToolResult.failure(
                 ErrorCode.REFUSED_SENSITIVE, "Do not save credentials or IDs."
             )
+        # A "fact" that is really an instruction would be read back into the prompt later.
+        if rule_category(value) is not None:
+            return ToolResult.failure(
+                ErrorCode.REFUSED_UNSAFE, "Not saved: that is an instruction, not a fact."
+            )
         return None
 
     async def remember(self, user_id: str, key: str, value: str) -> ToolResult:
@@ -56,7 +64,8 @@ class PostgresMemoryService:
             return invalid
         return await self._query(
             "INSERT INTO memories (user_id, key, value) VALUES ($1, $2, $3) "
-            "ON CONFLICT (user_id, key) DO UPDATE SET value=EXCLUDED.value, updated_at=now() "
+            "ON CONFLICT (user_id, key) DO UPDATE "
+            "SET value=EXCLUDED.value, updated_at=now(), last_seen_at=now() "
             "RETURNING key, value",
             user_id,
             key,
@@ -81,7 +90,8 @@ class PostgresMemoryService:
         if invalid:
             return invalid
         result = await self._query(
-            "UPDATE memories SET value=$3, updated_at=now() WHERE user_id=$1 AND key=$2 "
+            "UPDATE memories SET value=$3, updated_at=now(), last_seen_at=now() "
+            "WHERE user_id=$1 AND key=$2 "
             "RETURNING key, value",
             user_id,
             key,
@@ -102,6 +112,28 @@ class PostgresMemoryService:
         if result.ok:
             return ToolResult.success({"deleted": bool(result.data["memories"]), "key": key})
         return result
+
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        """Record that this user started a call, so retention keeps their facts."""
+        return await self._execute(
+            "UPDATE memories SET last_seen_at=now() WHERE user_id=$1", user_id
+        )
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        """Delete every fact of users who have not started a call for `days` days."""
+        return await self._execute(
+            "DELETE FROM memories WHERE last_seen_at < now() - make_interval(days => $1)", days
+        )
+
+    async def _execute(self, sql: str, *args: str | int) -> ToolResult:
+        """Run a housekeeping write and report how many rows it touched."""
+        if self.fault_write:
+            return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory write failed.")
+        try:
+            status = await self.pool.execute(sql, *args)  # e.g. "DELETE 3"
+        except (asyncpg.PostgresError, OSError, TimeoutError):
+            return ToolResult.failure(ErrorCode.STORAGE_ERROR, "Memory is unavailable.")
+        return ToolResult.success({"rows": int(status.rsplit(" ", 1)[-1])})
 
 
 class DeferredMemoryService:
@@ -150,6 +182,14 @@ class DeferredMemoryService:
         service = await self._ready()
         return service if isinstance(service, ToolResult) else await service.forget(user_id, key)
 
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.mark_seen(user_id)
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        service = await self._ready()
+        return service if isinstance(service, ToolResult) else await service.delete_inactive(days)
+
     async def aclose(self) -> None:
         """Close the pool, or stop a connection still in progress."""
         if not self._task.done():
@@ -173,3 +213,9 @@ class NotImplementedMemoryService:
 
     async def forget(self, user_id: str, key: str) -> ToolResult:
         return await self.remember(user_id, key, "")
+
+    async def mark_seen(self, user_id: str) -> ToolResult:
+        return await self.remember(user_id, "", "")
+
+    async def delete_inactive(self, days: int) -> ToolResult:
+        return await self.remember("", "", "")

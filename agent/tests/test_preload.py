@@ -1,5 +1,6 @@
 """Saved facts are loaded into Sarjy's instructions and kept in step with changes."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 from sarjy.domain.results import ErrorCode, ToolResult
@@ -106,3 +107,54 @@ async def test_memory_panel_falls_back_to_storage_when_preload_failed():
 def test_assistant_name_is_configurable():
     agent = SarjyAgent("user-a", AsyncMock(), AsyncMock(), name="Nova")
     assert agent.instructions.startswith("You are Nova,")
+
+
+async def test_fact_deleted_while_loading_does_not_come_back():
+    memory = AsyncMock()
+    loaded = asyncio.Event()
+
+    async def slow_recall(user_id, key=None):
+        await loaded.wait()  # the snapshot was read before the delete committed
+        return ToolResult.success({"memories": [{"key": "city", "value": "Riyadh"}]})
+
+    memory.recall.side_effect = slow_recall
+    memory.forget.return_value = ToolResult.success({"deleted": True, "key": "city"})
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    preload = agent.start_preloading_memories()
+    await call(SarjyAgent.forget)(agent, "city")  # user deletes during loading
+    loaded.set()
+    await preload
+    assert "- city: Riyadh" not in agent.instructions
+    snapshot = await agent.memory_snapshot()
+    assert snapshot.data["memories"] == []
+
+
+async def test_uncertain_write_is_reported_then_verified():
+    memory = memory_with({})
+    events = AsyncMock()
+    agent = SarjyAgent("user-a", memory, AsyncMock(), events=events)
+    await agent.start_preloading_memories()
+    memory.remember.return_value = ToolResult.failure(ErrorCode.UPSTREAM_TIMEOUT, "uncertain")
+    memory.recall.return_value = ToolResult.success(
+        {"memories": [{"key": "favorite_color", "value": "teal"}]}
+    )  # the write did commit
+    await call(SarjyAgent.remember)(agent, "favorite_color", "teal")
+    await asyncio.gather(*agent._background)
+    memory_events = [
+        c.args[0] for c in events.emit.call_args_list if c.args[0]["type"] == "memory_changed"
+    ]
+    assert [e["op"] for e in memory_events] == ["uncertain", "saved"]
+    assert "- favorite_color: teal" in agent.instructions
+
+
+async def test_uncertain_write_that_did_not_commit_is_reported_as_failed():
+    memory = memory_with({})
+    events = AsyncMock()
+    agent = SarjyAgent("user-a", memory, AsyncMock(), events=events)
+    await agent.start_preloading_memories()
+    memory.remember.return_value = ToolResult.failure(ErrorCode.UPSTREAM_TIMEOUT, "uncertain")
+    await call(SarjyAgent.remember)(agent, "favorite_color", "teal")  # recall finds nothing
+    await asyncio.gather(*agent._background)
+    last = events.emit.call_args_list[-1].args[0]
+    assert last["op"] == "failed" and last["action"] == "saved"
+    assert "favorite_color" not in agent.instructions

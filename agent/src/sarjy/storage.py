@@ -6,13 +6,19 @@ import asyncpg
 
 from sarjy.config import Settings
 
-# agent/db/migrations/001_memories.sql (the Dockerfile copies agent/db into the image).
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "db" / "migrations" / "001_memories.sql"
+# agent/db/migrations (the Dockerfile copies agent/db into the image).
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "db" / "migrations"
+
+
+def migration_sql() -> list[str]:
+    """Every migration, in file-name order."""
+    return [path.read_text() for path in sorted(MIGRATIONS_DIR.glob("*.sql"))]
 
 
 async def apply_schema(connection: asyncpg.Connection | asyncpg.Pool) -> None:
-    """Create the memories table if it is missing. Idempotent, so safe on every start."""
-    await connection.execute(SCHEMA_PATH.read_text())
+    """Bring the schema up to date. Every migration is idempotent, so safe on every start."""
+    for sql in migration_sql():
+        await connection.execute(sql)
 
 
 async def connect_memory_pool(settings: Settings) -> asyncpg.Pool:

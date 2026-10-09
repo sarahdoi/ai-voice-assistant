@@ -34,6 +34,8 @@ export type MemoryNotice = MemoryChangedEvent & { nonce: number; previous?: stri
 
 export type SarjyState = {
   facts: FactRow[];
+  /** Keys forgotten during this session, so an older snapshot can't bring them back. */
+  forgotten: string[];
   activity: ActivityRow[];
   activeTool: { id: string; name: ToolName } | null;
   notice: MemoryNotice | null;
@@ -42,6 +44,7 @@ export type SarjyState = {
 
 const INITIAL: SarjyState = {
   facts: [],
+  forgotten: [],
   activity: [],
   activeTool: null,
   notice: null,
@@ -70,9 +73,10 @@ function reducer(state: SarjyState, action: Action): SarjyState {
           }
         : state;
     case 'snapshot': {
-      // Changes that arrived live during the request are newer than the snapshot.
+      // Changes that arrived live during the request are newer than the snapshot:
+      // live saves win, and live deletions stay deleted.
       const live = state.facts.filter((f) => f.updatedAt > 0);
-      const liveKeys = new Set(live.map((f) => f.key));
+      const liveKeys = new Set([...live.map((f) => f.key), ...state.forgotten]);
       return {
         ...state,
         memoryStatus: 'ready',
@@ -130,10 +134,16 @@ function applyEvent(state: SarjyState, event: SarjyEvent, at: number): SarjyStat
           ...state,
           notice,
           facts: [row, ...state.facts.filter((f) => f.key !== event.key)],
+          forgotten: state.forgotten.filter((k) => k !== event.key),
         };
       }
       if (event.op === 'forgotten') {
-        return { ...state, notice, facts: state.facts.filter((f) => f.key !== event.key) };
+        return {
+          ...state,
+          notice,
+          facts: state.facts.filter((f) => f.key !== event.key),
+          forgotten: [...state.forgotten.filter((k) => k !== event.key), event.key],
+        };
       }
       return { ...state, notice };
     }
@@ -142,9 +152,15 @@ function applyEvent(state: SarjyState, event: SarjyEvent, at: number): SarjyStat
 
 /** Failures the user must hear about even if they missed what Sarjy said. */
 function toastFor(event: SarjyEvent) {
+  if (event.type === 'memory_changed' && event.op === 'uncertain') {
+    toast.warning(`Couldn’t confirm the change to your ${humanizeKey(event.key)}`, {
+      description: `Memory is slow right now. ${APP_NAME} is checking whether it went through.`,
+    });
+  }
   if (event.type === 'memory_changed' && event.op === 'failed') {
-    toast.warning(`Couldn't save your ${humanizeKey(event.key)}`, {
-      description: 'Memory is unavailable right now. Nothing was stored.',
+    const verb = { saved: 'save', corrected: 'update', forgotten: 'forget' }[event.action];
+    toast.warning(`Couldn’t ${verb} your ${humanizeKey(event.key)}`, {
+      description: event.message,
     });
   }
   if (

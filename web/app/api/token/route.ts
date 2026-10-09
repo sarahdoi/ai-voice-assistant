@@ -5,7 +5,12 @@ import {
   RoomConfiguration,
   type VideoGrant,
 } from 'livekit-server-sdk';
-import { GUEST_ID_COOKIE, guestIdCookieOptions, resolveGuestIdentity } from '@/lib/guest-identity';
+import {
+  GUEST_ID_COOKIE,
+  MIN_SECRET_LENGTH,
+  guestIdCookieOptions,
+  resolveGuestIdentity,
+} from '@/lib/guest-identity';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -17,6 +22,8 @@ type ConnectionDetails = {
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
+// Signs the guest cookie. Server-only; rotating it starts every visitor as a new guest.
+const GUEST_ID_SECRET = process.env.GUEST_ID_SECRET;
 const AGENT_NAME = process.env.AGENT_NAME ?? 'sarjy';
 
 // Never cache: every call mints a fresh, short-lived token.
@@ -36,6 +43,10 @@ export async function POST(req: NextRequest) {
     );
     return new NextResponse('Voice service is not configured', { status: 500 });
   }
+  if (!GUEST_ID_SECRET || GUEST_ID_SECRET.length < MIN_SECRET_LENGTH) {
+    console.error(`GUEST_ID_SECRET must be set to at least ${MIN_SECRET_LENGTH} random characters`);
+    return new NextResponse('Voice service is not configured', { status: 500 });
+  }
 
   // Only our own pages may request tokens. Browsers always send Origin on POST.
   const origin = req.headers.get('origin');
@@ -43,7 +54,10 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  const { userId, isNew } = resolveGuestIdentity(req.cookies.get(GUEST_ID_COOKIE)?.value);
+  const { userId, cookie, isNew } = resolveGuestIdentity(
+    req.cookies.get(GUEST_ID_COOKIE)?.value,
+    GUEST_ID_SECRET
+  );
   const roomName = `${AGENT_NAME}-${crypto.randomUUID()}`;
   const participantName = 'Guest';
 
@@ -58,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
     // Set on every call so the one-year expiry slides forward with each visit.
-    response.cookies.set(GUEST_ID_COOKIE, userId, guestIdCookieOptions);
+    response.cookies.set(GUEST_ID_COOKIE, cookie, guestIdCookieOptions);
     if (isNew) console.info('issued new guest identity');
     return response;
   } catch (error) {

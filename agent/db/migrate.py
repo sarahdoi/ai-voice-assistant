@@ -1,11 +1,11 @@
-"""Apply the fresh schema: cd agent && uv run python db/migrate.py."""
+"""Apply all migrations: cd agent && uv run python db/migrate.py."""
 
 import asyncio
-from pathlib import Path
 
 import asyncpg
 
 from sarjy.config import get_settings
+from sarjy.storage import apply_schema
 
 
 async def main() -> None:
@@ -16,9 +16,7 @@ async def main() -> None:
         settings.database_url.get_secret_value(), timeout=settings.db_connect_timeout_s
     )
     try:
-        await connection.execute(
-            (Path(__file__).parent / "migrations/001_memories.sql").read_text()
-        )
+        await apply_schema(connection)
     finally:
         await connection.close()
     print("Memory schema ready.")

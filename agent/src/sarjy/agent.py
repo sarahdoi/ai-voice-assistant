@@ -7,10 +7,12 @@ import logging
 import httpx
 from dotenv import load_dotenv
 from livekit import rtc
-from livekit.agents import AgentServer, JobContext, cli, room_io
+from livekit.agents import AgentServer, JobContext, cli, inference, room_io
 
-from sarjy.config import get_settings
+from sarjy.config import Settings, get_settings
 from sarjy.events import MEMORY_RPC_METHOD, RoomEventSink
+from sarjy.policy import TopicGuard, llm_classifier
+from sarjy.retention import SWEEPER
 from sarjy.services.memory import DeferredMemoryService, NotImplementedMemoryService
 from sarjy.services.weather import (
     FallbackWeatherService,
@@ -47,8 +49,24 @@ async def entrypoint(ctx: JobContext) -> None:
         deferred = DeferredMemoryService(
             connect_memory_pool(settings), fault_write=settings.fault_db_write
         )
-        ctx.add_shutdown_callback(deferred.aclose)
         memory = deferred
+
+        # Housekeeping in the background, never in the way of the call: mark this
+        # guest as active, then occasionally delete guests inactive for too long.
+        # One step at a time, so loading the user's facts keeps the pool's other connection.
+        async def housekeep() -> None:
+            await deferred.mark_seen(user_id)
+            await SWEEPER.maybe_sweep(deferred, settings.memory_retention_days)
+
+        housekeeping = asyncio.create_task(housekeep())
+
+        async def close_memory() -> None:
+            # Shutdown callbacks run concurrently, so finish housekeeping before closing.
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(asyncio.shield(housekeeping), timeout=2)
+            await deferred.aclose()
+
+        ctx.add_shutdown_callback(close_memory)
 
     weather_client = httpx.AsyncClient(timeout=settings.weather_timeout_s)
     ctx.add_shutdown_callback(weather_client.aclose)
@@ -73,6 +91,7 @@ async def entrypoint(ctx: JobContext) -> None:
         weather=weather,
         events=RoomEventSink(ctx.room, user_id),
         name=settings.app_name,
+        guard=build_guard(settings),
     )
     # Load saved facts right away, while the voice session is still starting, so
     # they are ready for the greeting and for the memory panel before anyone asks.
@@ -89,6 +108,9 @@ async def entrypoint(ctx: JobContext) -> None:
         agent=agent,
         room=ctx.room,
         room_options=room_io.RoomOptions(participant_identity=user_id),
+        # Keep no audio, transcripts or traces in LiveKit Cloud: memory is the only
+        # thing this app stores, and only what the user asked it to remember.
+        record=False,
     )
     # Wait briefly so a returning user can be greeted by name; if storage is slow,
     # greet now and keep loading.
@@ -98,6 +120,16 @@ async def entrypoint(ctx: JobContext) -> None:
         instructions=f"Greet the user briefly as {settings.app_name}. "
         "If you know their name, use it."
     )
+
+
+def build_guard(settings: Settings) -> TopicGuard:
+    """The topic gate for user turns, as configured by GUARD_MODE."""
+    if settings.guard_mode == "off":
+        return TopicGuard(rules=False)
+    if settings.guard_mode == "rules":
+        return TopicGuard()
+    model = inference.LLM(model=settings.guard_model or settings.llm_model)
+    return TopicGuard(llm_classifier(model), timeout_s=settings.guard_timeout_s)
 
 
 def main() -> None:
