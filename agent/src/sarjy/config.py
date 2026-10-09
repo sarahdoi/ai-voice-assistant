@@ -3,7 +3,7 @@
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     gemini_voice: str = "Puck"
 
     database_url: SecretStr | None = None
+
+    weather_geocoding_url: HttpUrl = HttpUrl("https://geocoding-api.open-meteo.com/v1/search")
+    weather_forecast_url: HttpUrl = HttpUrl("https://api.open-meteo.com/v1/forecast")
+
+    weather_fallback_url: HttpUrl = HttpUrl(
+        "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+    )
+    weather_user_agent: str = "Sarjy/0.1 github.com/sarahdoi/ai-voice-assistant"
 
     weather_timeout_s: float = 3.0
     db_timeout_s: float = 2.0
