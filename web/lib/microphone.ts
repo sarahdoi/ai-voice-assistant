@@ -1,3 +1,5 @@
+import { APP_NAME } from '@/lib/app-config';
+
 /**
  * Ask for the microphone before a call starts, so a blocked or missing mic gets
  * a clear message instead of a crash. The test stream is closed immediately.
@@ -28,8 +30,7 @@ export const MICROPHONE_MESSAGES: Record<
 > = {
   blocked: {
     title: 'Microphone is blocked',
-    description:
-      'Allow Sarjy to use your microphone so it can hear you. Click the lock icon in the address bar, then try again.',
+    description: `Allow ${APP_NAME} to use your microphone so it can hear you. Click the lock icon in the address bar, then try again.`,
   },
   missing: {
     title: 'No microphone found',

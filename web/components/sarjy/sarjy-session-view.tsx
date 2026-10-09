@@ -22,6 +22,7 @@ import { SarjyMark } from '@/components/sarjy/sarjy-mark';
 import { SarjyOrb } from '@/components/sarjy/sarjy-orb';
 import { StatusPill } from '@/components/sarjy/status-pill';
 import { useSarjyEvents } from '@/hooks/useSarjyEvents';
+import { APP_NAME } from '@/lib/app-config';
 import { MICROPHONE_MESSAGES, microphoneErrorStatus } from '@/lib/microphone';
 import { cn } from '@/lib/shadcn/utils';
 
@@ -35,7 +36,7 @@ function useElapsed() {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/** The last exchange, labelled YOU and SARJY, with Sarjy's line larger. */
+/** The last exchange, labelled with who spoke, with the assistant's line larger. */
 function Captions() {
   const session = useSessionContext();
   const { messages } = useSessionMessages(session);
@@ -62,7 +63,9 @@ function Captions() {
           )}
           {lastSarjy && (
             <div className="flex flex-col gap-1">
-              <span className="text-primary font-mono text-xs tracking-wider">SARJY</span>
+              <span className="text-primary font-mono text-xs tracking-wider uppercase">
+                {APP_NAME}
+              </span>
               <p className="text-xl leading-relaxed text-balance md:text-2xl">
                 {lastSarjy.message}
               </p>
@@ -109,7 +112,7 @@ export function SarjySessionView({ ref, className, ...props }: React.ComponentPr
       <header className="flex items-center justify-between px-5 py-5 md:px-8">
         <div className="flex items-center gap-2.5">
           <SarjyMark className="size-6" />
-          <span className="font-semibold tracking-tight">Sarjy</span>
+          <span className="font-semibold tracking-tight">{APP_NAME}</span>
           <span className="border-border text-muted-foreground rounded-full border px-2.5 py-0.5 font-mono text-xs">
             voice assistant
           </span>
@@ -191,7 +194,7 @@ export function SarjySessionView({ ref, className, ...props }: React.ComponentPr
             aria-label="Memory"
             className="flex max-w-[420px] min-w-0 flex-[1_1_340px] flex-col gap-5"
           >
-            <PanelCard title="What Sarjy knows about you">
+            <PanelCard title={`What ${APP_NAME} knows about you`}>
               <MemoryList state={sarjy} />
             </PanelCard>
           </aside>

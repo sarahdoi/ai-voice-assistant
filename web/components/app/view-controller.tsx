@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
 import { WelcomeView } from '@/components/app/welcome-view';
 import { SarjySessionView } from '@/components/sarjy/sarjy-session-view';
+import { APP_NAME } from '@/lib/app-config';
 import { MICROPHONE_MESSAGES, checkMicrophone, microphoneErrorStatus } from '@/lib/microphone';
 
 const MotionWelcomeView = motion.create(WelcomeView);
@@ -32,7 +33,7 @@ type Problem = { title: string; description: string };
 
 const START_FAILED: Problem = {
   title: 'Couldn’t start the call',
-  description: 'Sarjy may be busy or offline. Please try again in a moment.',
+  description: `${APP_NAME} may be busy or offline. Please try again in a moment.`,
 };
 
 export function ViewController() {
@@ -65,7 +66,7 @@ export function ViewController() {
         <MotionWelcomeView
           key="welcome"
           {...VIEW_MOTION_PROPS}
-          startButtonText="Talk to Sarjy"
+          startButtonText={`Talk to ${APP_NAME}`}
           onStartCall={startCall}
           problem={problem}
           starting={starting}

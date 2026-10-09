@@ -66,3 +66,43 @@ async def test_saves_and_forgets_update_the_instructions():
     await call(SarjyAgent.forget)(agent, "favorite_color")
     assert "favorite_color" not in agent.instructions  # a forgotten fact is gone from Sarjy's head
     assert "- name: Sarah" in agent.instructions
+
+
+async def test_memory_panel_is_answered_from_the_preloaded_copy():
+    memory = memory_with({"name": "Sarah"})
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    agent.start_preloading_memories()  # before anyone asks
+    snapshot = await agent.memory_snapshot()
+    assert snapshot.ok
+    assert snapshot.data["memories"] == [{"key": "name", "value": "Sarah"}]
+    assert memory.recall.await_count == 1  # no second database query
+
+
+async def test_memory_panel_sees_changes_made_after_preload():
+    memory = memory_with({"name": "Sarah"})
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    await agent.start_preloading_memories()
+    memory.remember.return_value = ToolResult.success(
+        {"memories": [{"key": "city", "value": "Riyadh"}]}
+    )
+    await call(SarjyAgent.remember)(agent, "city", "Riyadh")
+    snapshot = await agent.memory_snapshot()
+    keys = {m["key"] for m in snapshot.data["memories"]}
+    assert keys == {"name", "city"}
+
+
+async def test_memory_panel_falls_back_to_storage_when_preload_failed():
+    memory = AsyncMock()
+    memory.recall.side_effect = [
+        ToolResult.failure(ErrorCode.STORAGE_ERROR, "down"),
+        ToolResult.success({"memories": [{"key": "name", "value": "Sarah"}]}),
+    ]
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    await agent.start_preloading_memories()
+    snapshot = await agent.memory_snapshot()
+    assert snapshot.data["memories"] == [{"key": "name", "value": "Sarah"}]
+
+
+def test_assistant_name_is_configurable():
+    agent = SarjyAgent("user-a", AsyncMock(), AsyncMock(), name="Nova")
+    assert agent.instructions.startswith("You are Nova,")

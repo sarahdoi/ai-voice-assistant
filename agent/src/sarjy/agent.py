@@ -31,7 +31,7 @@ load_dotenv(".env")
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="sarjy")
+@server.rtc_session(agent_name=get_settings().agent_name)
 async def entrypoint(ctx: JobContext) -> None:
     settings = get_settings()
     await ctx.connect()
@@ -41,7 +41,7 @@ async def entrypoint(ctx: JobContext) -> None:
     user_id = participant.identity
     logger.info("session started")
 
-    # Start connecting now; a sleeping database wakes while Sarjy greets the user.
+    # Start connecting now; a sleeping database wakes while the session starts.
     memory = NotImplementedMemoryService()
     if settings.database_url:
         deferred = DeferredMemoryService(
@@ -72,7 +72,11 @@ async def entrypoint(ctx: JobContext) -> None:
         memory=memory,
         weather=weather,
         events=RoomEventSink(ctx.room, user_id),
+        name=settings.app_name,
     )
+    # Load saved facts right away, while the voice session is still starting, so
+    # they are ready for the greeting and for the memory panel before anyone asks.
+    preload = agent.start_preloading_memories()
 
     # The UI asks for the saved facts when it opens. Only this session's user may ask.
     @ctx.room.local_participant.register_rpc_method(MEMORY_RPC_METHOD)
@@ -86,15 +90,20 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
         room_options=room_io.RoomOptions(participant_identity=user_id),
     )
-    # Load saved facts into Sarjy's instructions. Wait briefly so a returning user
-    # can be greeted by name; if storage is slow, greet now and keep loading.
-    preload = agent.start_preloading_memories()
+    # Wait briefly so a returning user can be greeted by name; if storage is slow,
+    # greet now and keep loading.
     with contextlib.suppress(TimeoutError):
         await asyncio.wait_for(asyncio.shield(preload), timeout=PRELOAD_WAIT_S)
     await session.generate_reply(
-        instructions="Greet the user briefly as Sarjy. If you know their name, use it."
+        instructions=f"Greet the user briefly as {settings.app_name}. "
+        "If you know their name, use it."
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Command-line entry point: `voice-agent dev` locally, `voice-agent start` in production."""
     cli.run_app(server)
+
+
+if __name__ == "__main__":
+    main()

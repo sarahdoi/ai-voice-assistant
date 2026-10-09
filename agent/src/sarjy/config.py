@@ -16,6 +16,11 @@ class VoiceProvider(StrEnum):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # The name the assistant introduces itself with, and the LiveKit agent name
+    # the web app dispatches (must match AGENT_NAME there).
+    app_name: str = "Sarjy"
+    agent_name: str = "sarjy"
+
     voice_provider: VoiceProvider = VoiceProvider.LIVEKIT_PIPELINE
     stt_model: str = "assemblyai/universal-3-6-pro"
     llm_model: str = "google/gemma-4-31b-it"

@@ -6,7 +6,7 @@
  * becomes the LiveKit participant identity, which the agent uses as user_id.
  *
  * Nothing is written to the database here: a memory row only exists once the
- * user asks Sarjy to remember something.
+ * user asks the assistant to remember something.
  */
 
 export const GUEST_ID_COOKIE = 'sarjy_uid';

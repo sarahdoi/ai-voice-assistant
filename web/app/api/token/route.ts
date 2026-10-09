@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { userId, isNew } = resolveGuestIdentity(req.cookies.get(GUEST_ID_COOKIE)?.value);
-  const roomName = `sarjy-${crypto.randomUUID()}`;
+  const roomName = `${AGENT_NAME}-${crypto.randomUUID()}`;
   const participantName = 'Guest';
 
   try {

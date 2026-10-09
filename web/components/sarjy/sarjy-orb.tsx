@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { type TrackReference, type useAgent, useTrackVolume } from '@livekit/components-react';
+import { APP_NAME } from '@/lib/app-config';
 import { cn } from '@/lib/shadcn/utils';
 
 type AgentState = ReturnType<typeof useAgent>['state'];
@@ -54,7 +55,7 @@ export function SarjyOrb({
   return (
     <div
       role="img"
-      aria-label={`Sarjy is ${speaking ? 'speaking' : waiting ? 'getting ready' : 'listening'}`}
+      aria-label={`${APP_NAME} is ${speaking ? 'speaking' : waiting ? 'getting ready' : 'listening'}`}
       className={cn('relative aspect-square', className)}
     >
       <div className="border-primary/20 absolute inset-0 rounded-full border" />

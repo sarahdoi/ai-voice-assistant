@@ -3,6 +3,7 @@ import { toast as sonnerToast } from 'sonner';
 import { useAgent, useSessionContext } from '@livekit/components-react';
 import { WarningIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { APP_NAME } from '@/lib/app-config';
 
 interface ToastProps {
   title: ReactNode;
@@ -33,7 +34,7 @@ export function useAgentErrors() {
       const reasons = agent.failureReasons;
 
       toastAlert({
-        title: 'Sarjy disconnected',
+        title: `${APP_NAME} disconnected`,
         description: (
           <>
             {reasons.length > 1 && (

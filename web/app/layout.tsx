@@ -1,7 +1,9 @@
+import type { Metadata } from 'next';
 import { Public_Sans } from 'next/font/google';
 import localFont from 'next/font/local';
 import { ThemeProvider } from '@/components/app/theme-provider';
 import { ThemeToggle } from '@/components/app/theme-toggle';
+import { APP_NAME } from '@/lib/app-config';
 import { cn } from '@/lib/shadcn/utils';
 import '@/styles/globals.css';
 
@@ -37,6 +39,11 @@ const commitMono = localFont({
   ],
 });
 
+export const metadata: Metadata = {
+  title: APP_NAME,
+  description: `${APP_NAME}, a voice assistant that remembers you and checks the weather.`,
+};
+
 interface RootLayoutProps {
   children: React.ReactNode;
 }
@@ -52,13 +59,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         'scroll-smooth font-sans antialiased'
       )}
     >
-      <head>
-        <title>Sarjy</title>
-        <meta
-          name="description"
-          content="Sarjy, a voice assistant that remembers you and checks the weather."
-        />
-      </head>
       <body className="overflow-x-hidden">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           {children}

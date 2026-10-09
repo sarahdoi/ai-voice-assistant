@@ -4,6 +4,7 @@ import { useEffect, useReducer } from 'react';
 import { type RemoteParticipant, RoomEvent } from 'livekit-client';
 import { toast } from 'sonner';
 import { useAgent, useSessionContext } from '@livekit/components-react';
+import { APP_NAME } from '@/lib/app-config';
 import { readCachedFacts, writeCachedFacts } from '@/lib/memory-cache';
 import {
   EVENTS_TOPIC,
@@ -153,7 +154,7 @@ function toastFor(event: SarjyEvent) {
     (event.error_code === 'UPSTREAM_TIMEOUT' || event.error_code === 'UPSTREAM_ERROR')
   ) {
     toast.warning('Weather service didn’t respond', {
-      description: 'Sarjy won’t guess the weather. Ask again in a moment.',
+      description: `${APP_NAME} won’t guess the weather. Ask again in a moment.`,
     });
   }
 }

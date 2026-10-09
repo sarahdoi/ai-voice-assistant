@@ -1,6 +1,5 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@source "../node_modules/streamdown/dist/index.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -12,7 +11,7 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* Sarjy cyan, darkened in light mode so white button text stays readable. */
+  /* Brand cyan, darkened in light mode so white button text stays readable. */
   --primary: #0e7490;
   --primary-hover: color-mix(in srgb, #0e7490 80%, #000);
   --primary-foreground: oklch(0.985 0 0);
@@ -126,7 +125,7 @@
   }
 }
 
-/* Sarjy orb: a slow breath while listening. */
+/* Orb: a slow breath while listening. */
 @keyframes sarjy-breathe {
   0%,
   100% {
@@ -137,7 +136,7 @@
   }
 }
 
-/* Sarjy orb: ripples flowing outward while the user waits. */
+/* Orb: ripples flowing outward while the user waits. */
 @keyframes sarjy-ripple {
   from {
     scale: 1;
@@ -149,7 +148,7 @@
   }
 }
 
-/* Sarjy buddy: an occasional blink. */
+/* Orb eyes: an occasional blink. */
 @keyframes sarjy-blink {
   0%,
   90%,
@@ -161,7 +160,7 @@
   }
 }
 
-/* Sarjy orb: eyes glancing side to side during a lookup. */
+/* Orb: eyes glancing side to side during a lookup. */
 @keyframes sarjy-glance {
   0%,
   100% {
@@ -175,7 +174,7 @@
   }
 }
 
-/* Sarjy backdrop: slow drifting glows behind the page. */
+/* Backdrop: slow drifting glows behind the page. */
 @keyframes sarjy-drift {
   from {
     background-position: 0% 0%;

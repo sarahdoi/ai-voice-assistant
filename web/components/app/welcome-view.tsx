@@ -2,6 +2,7 @@ import { WarningIcon } from '@phosphor-icons/react';
 import { SarjyBackdrop } from '@/components/sarjy/sarjy-backdrop';
 import { SarjyMark } from '@/components/sarjy/sarjy-mark';
 import { Button } from '@/components/ui/button';
+import { APP_NAME } from '@/lib/app-config';
 
 interface WelcomeViewProps {
   startButtonText: string;
@@ -24,9 +25,11 @@ export const WelcomeView = ({
       <section className="flex flex-col items-center justify-center px-4 text-center">
         <SarjyMark animated className="mb-6 size-20" />
 
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">Hi, I’m Sarjy</h1>
+        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+          Hi, I’m {APP_NAME}
+        </h1>
         <p className="text-muted-foreground max-w-prose pt-2 leading-6">
-          Your personal voice assistant.
+          Your personal voice assistant
         </p>
 
         {problem && (

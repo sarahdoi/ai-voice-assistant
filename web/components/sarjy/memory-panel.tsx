@@ -1,6 +1,7 @@
 'use client';
 
 import type { SarjyState } from '@/hooks/useSarjyEvents';
+import { APP_NAME } from '@/lib/app-config';
 import { humanizeKey } from '@/lib/sarjy-events';
 
 /**
@@ -22,7 +23,7 @@ function FactSentence({ factKey, value }: { factKey: string; value: string }) {
 
 const isName = (key: string) => /^(user_|my_)?name$/.test(key);
 
-/** What Sarjy knows about this user, straight from the agent's memory service. */
+/** What the assistant knows about this user, straight from the agent's memory service. */
 export function MemoryList({ state }: { state: SarjyState }) {
   return (
     <div className="flex flex-col gap-4">
@@ -34,7 +35,7 @@ export function MemoryList({ state }: { state: SarjyState }) {
       )}
       {state.memoryStatus === 'ready' && state.facts.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          Nothing yet. Tell Sarjy something to remember.
+          Nothing yet. Tell {APP_NAME} something to remember.
         </p>
       )}
       {state.facts.length > 0 && (
@@ -48,7 +49,7 @@ export function MemoryList({ state }: { state: SarjyState }) {
             ))}
         </ul>
       )}
-      <p className="text-muted-foreground text-xs">Ask Sarjy to forget anything.</p>
+      <p className="text-muted-foreground text-xs">Ask {APP_NAME} to forget anything.</p>
     </div>
   );
 }
