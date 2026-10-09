@@ -302,3 +302,51 @@ async def test_http_cancellation_propagates():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(asyncio.CancelledError):
             await make_service(client).get_forecast("Lisbon")
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+async def test_http_failure_retries_then_uses_real_secondary_adapter(status):
+    from sarjy.services.weather import FallbackWeatherService, MetNorwayWeatherService
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.host)
+        if request.url.host == "geocoding.example":
+            return httpx.Response(200, json={"results": [PLACE]})
+        if request.url.host == "forecast.example":
+            return httpx.Response(status)
+        assert request.headers["User-Agent"] == "Sarjy github.com/sarahdoi/ai-voice-assistant"
+        return httpx.Response(
+            200,
+            headers={"Expires": "Fri, 09 Oct 2099 23:00:00 GMT"},
+            json={
+                "properties": {
+                    "meta": {"units": {"air_temperature": "celsius", "wind_speed": "m/s"}},
+                    "timeseries": [
+                        {
+                            "time": "2026-10-09T12:00:00Z",
+                            "data": {
+                                "instant": {"details": {"air_temperature": 21, "wind_speed": 5}}
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        primary = make_service(client)
+        secondary = MetNorwayWeatherService(
+            primary,
+            url="https://secondary.example/forecast",
+            user_agent="Sarjy github.com/sarahdoi/ai-voice-assistant",
+        )
+        service = FallbackWeatherService(primary, secondary)
+        result = await service.get_forecast("Lisbon", "PT")
+        assert result.ok
+        assert result.data["source"] == "MET Norway"
+        assert result.data["forecast_periods"][0]["air_temperature"] == 21
+        assert calls.count("forecast.example") == 2
+        await secondary.get_forecast("Lisbon", "PT")
+        assert calls.count("secondary.example") == 1

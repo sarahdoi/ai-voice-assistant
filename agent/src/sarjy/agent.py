@@ -9,7 +9,11 @@ from livekit.agents import AgentServer, JobContext, cli, room_io
 
 from sarjy.config import get_settings
 from sarjy.services.memory import NotImplementedMemoryService, PostgresMemoryService
-from sarjy.services.weather import OpenMeteoWeatherService
+from sarjy.services.weather import (
+    FallbackWeatherService,
+    MetNorwayWeatherService,
+    OpenMeteoWeatherService,
+)
 from sarjy.tools import SarjyAgent
 from sarjy.voice.factory import build_session
 
@@ -48,16 +52,21 @@ async def entrypoint(ctx: JobContext) -> None:
     weather_client = httpx.AsyncClient(timeout=settings.weather_timeout_s)
     ctx.add_shutdown_callback(weather_client.aclose)
     session = build_session(settings)
-    agent = SarjyAgent(
-        user_id=user_id,
-        memory=memory,
-        weather=OpenMeteoWeatherService(
-            weather_client,
-            geocoding_url=str(settings.weather_geocoding_url),
-            forecast_url=str(settings.weather_forecast_url),
-            fault=settings.fault_weather,
+    primary = OpenMeteoWeatherService(
+        weather_client,
+        geocoding_url=str(settings.weather_geocoding_url),
+        forecast_url=str(settings.weather_forecast_url),
+        fault=settings.fault_weather,
+    )
+    weather = FallbackWeatherService(
+        primary,
+        MetNorwayWeatherService(
+            primary,
+            url=str(settings.weather_fallback_url),
+            user_agent=settings.weather_user_agent,
         ),
     )
+    agent = SarjyAgent(user_id=user_id, memory=memory, weather=weather)
     await session.start(
         agent=agent,
         room=ctx.room,

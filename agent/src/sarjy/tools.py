@@ -30,7 +30,9 @@ If weather returns AMBIGUOUS, ask for country/state.
 Retry with its two-letter country code and region.
 Weather covers only current conditions, today and tomorrow in the returned timezone.
 Use returned units and dates. Null values are unavailable, not zero. Do not invent numbers.
-Mention Open-Meteo as the source when giving a forecast.
+Mention the returned source when giving a forecast.
+MET Norway returns UTC forecast periods, not current observations or daily summaries.
+Only describe returned periods and fields; do not invent missing daily or precipitation data.
 """
 
 

@@ -29,3 +29,13 @@ for current conditions and today/tomorrow forecasts.
 cd agent
 uv run pytest
 ```
+
+Live weather endpoint checks (optional):
+
+```sh
+RUN_WEATHER_INTEGRATION=1 uv run pytest tests/test_weather_integration.py
+```
+
+Weather retries Open-Meteo once on timeout/5xx, then falls back to MET Norway.
+Fallback forecasts contain UTC temperature/wind periods; city lookup still uses
+Open-Meteo. MET Norway data is attributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
