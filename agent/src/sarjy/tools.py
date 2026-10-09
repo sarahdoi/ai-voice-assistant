@@ -41,8 +41,9 @@ screen already shows it. Just carry on naturally; for a forget request a short
 Never state weather values that are not in the weather tool's data.
 If a tool fails, say so plainly and do not guess.
 Your saved facts about this user are listed at the end of these instructions and
-kept up to date; answer from that list directly. If it says memory could not be
-loaded, call recall before answering. No listed fact means no saved fact.
+kept up to date; answer from that list directly. If it says the list is not
+loaded or incomplete, call recall before answering about anything not listed.
+Only a complete list means an unlisted fact is not saved.
 Only save explicitly stated facts. Ask for clarification when a fact or key is unclear.
 Use stable short snake_case keys. Never save passwords, IDs or payment details.
 After forget, do not repeat or use the deleted fact from conversation history.
@@ -65,17 +66,32 @@ MAX_FACTS_IN_PROMPT = 50
 DEFAULT_NAME = "Sarjy"
 
 
-def instructions_with_memories(facts: dict[str, str] | None, name: str = DEFAULT_NAME) -> str:
-    """Base instructions plus the user's saved facts, clearly fenced as data."""
-    if facts is None:
+def instructions_with_memories(
+    facts: dict[str, str] | None, name: str = DEFAULT_NAME, *, complete: bool = True
+) -> str:
+    """Base instructions plus the user's saved facts, clearly fenced as data.
+
+    `complete` is False when the list holds only changes made this session because
+    the full list has not loaded; the model is then told to use recall, so it never
+    concludes that an older, unlisted fact doesn't exist.
+    """
+    lines = [
+        f"- {key}: {' '.join(value.split())}"  # one line per fact, no injected newlines
+        for key, value in list((facts or {}).items())[:MAX_FACTS_IN_PROMPT]
+    ]
+    if facts is None or (not complete and not lines):
         known = "Memory could not be loaded yet; use the recall tool for saved facts."
-    elif not facts:
+    elif not complete:
+        known = "\n".join(
+            [
+                *lines,
+                "(Incomplete: only changes from this session. "
+                "Use the recall tool for anything not listed.)",
+            ]
+        )
+    elif not lines:
         known = "No saved facts yet."
     else:
-        lines = [
-            f"- {key}: {' '.join(value.split())}"  # one line per fact, no injected newlines
-            for key, value in list(facts.items())[:MAX_FACTS_IN_PROMPT]
-        ]
         known = "\n".join(lines)
     return (
         f"{INSTRUCTIONS.format(name=name)}\n"
@@ -190,7 +206,9 @@ class SarjyAgent(Agent):
     async def _apply_facts(self) -> None:
         # Never let a prompt update break a save; the recall tool still works.
         try:
-            await self.update_instructions(instructions_with_memories(self._facts, self._name))
+            await self.update_instructions(
+                instructions_with_memories(self._facts, self._name, complete=self._facts_loaded)
+            )
         except Exception:
             logger.warning("could not update instructions with saved facts")
 
@@ -308,6 +326,12 @@ class SarjyAgent(Agent):
         """Look up a saved fact, or all saved facts when key is omitted."""
         label = f"memory.recall · {key}" if key else "memory.recall · all"
         result = await self._reported("recall", label, self._memory.recall(self._user_id, key))
+        if key is None and result.ok and not self._facts_loaded:
+            # A full recall after a failed preload completes the list after all.
+            self._changed_while_loading.clear()
+            self._facts = {m["key"]: m["value"] for m in result.data.get("memories", [])}
+            self._facts_loaded = True
+            await self._apply_facts()
         return result.model_dump_json()
 
     @function_tool

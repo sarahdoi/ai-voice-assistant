@@ -15,6 +15,14 @@ def build_session(settings: Settings) -> AgentSession:
                 turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
             )
         case VoiceProvider.GEMINI_LIVE:
+            # A speech-to-speech model detects turns and answers on the server, and
+            # LiveKit then skips on_user_turn_completed, so the topic gate never runs.
+            # Refuse to start unless the gate is off on purpose or the risk is accepted.
+            if settings.guard_mode != "off" and not settings.allow_ungated_realtime:
+                raise ValueError(
+                    "gemini_live bypasses the topic gate. Use livekit_pipeline, or set "
+                    "ALLOW_UNGATED_REALTIME=true to accept prompt-only guardrails."
+                )
             from livekit.plugins import google
 
             api_key = settings.google_api_key

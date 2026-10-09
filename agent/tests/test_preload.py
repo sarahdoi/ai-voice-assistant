@@ -158,3 +158,30 @@ async def test_uncertain_write_that_did_not_commit_is_reported_as_failed():
     last = events.emit.call_args_list[-1].args[0]
     assert last["op"] == "failed" and last["action"] == "saved"
     assert "favorite_color" not in agent.instructions
+
+
+async def test_failed_preload_then_save_still_says_the_list_is_incomplete():
+    memory = AsyncMock()
+    memory.recall.return_value = ToolResult.failure(ErrorCode.STORAGE_ERROR, "down")
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    await agent.start_preloading_memories()
+    memory.remember.return_value = ToolResult.success(
+        {"memories": [{"key": "city", "value": "Riyadh"}]}
+    )
+    await call(SarjyAgent.remember)(agent, "city", "Riyadh")
+    assert "- city: Riyadh" in agent.instructions
+    assert "Incomplete" in agent.instructions  # older facts may exist; use recall
+    assert "No saved facts yet." not in agent.instructions
+
+
+async def test_full_recall_completes_the_list_after_a_failed_preload():
+    memory = AsyncMock()
+    memory.recall.return_value = ToolResult.failure(ErrorCode.STORAGE_ERROR, "down")
+    agent = SarjyAgent("user-a", memory, AsyncMock())
+    await agent.start_preloading_memories()
+    memory.recall.return_value = ToolResult.success(
+        {"memories": [{"key": "name", "value": "Sarah"}]}
+    )
+    await call(SarjyAgent.recall)(agent)
+    assert "- name: Sarah" in agent.instructions
+    assert "Incomplete" not in agent.instructions

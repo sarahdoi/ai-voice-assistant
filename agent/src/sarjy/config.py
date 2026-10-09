@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     guard_mode: Literal["classifier", "rules", "off"] = "classifier"
     guard_model: str = ""
     guard_timeout_s: float = 1.5
+    # Speech-to-speech providers skip the topic gate (see voice/factory.py); they
+    # only start when this is set, accepting prompt-only topic guardrails.
+    allow_ungated_realtime: bool = False
 
     fault_weather: bool = False
     fault_db_write: bool = False

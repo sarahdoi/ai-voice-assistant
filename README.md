@@ -3,6 +3,36 @@
 A browser voice assistant that remembers what you tell it across visits and can
 check the weather. Talk to it in real time; no sign-up needed.
 
+```mermaid
+flowchart LR
+    GH["GitHub<br/>main branch"]
+    Client(("Client"))
+
+    subgraph LKC["LiveKit Cloud"]
+        Build["Agent build<br/>agent/Dockerfile"]
+        Rooms["Rooms (WebRTC)"]
+        Workers["Agent workers<br/>scaled by LiveKit"]
+        Inference["LiveKit Inference<br/>STT · LLM · TTS"]
+    end
+
+    subgraph Vercel
+        Web["Web app<br/>/api/token"]
+    end
+
+    Neon[("Neon Postgres<br/>managed")]
+    Weather["Open-Meteo / MET Norway"]
+
+    GH -- "LK agent deploy" --> Build
+    GH -- "push > auto deploy" --> Web
+    Client <-- "WebRTC" --> Rooms
+    Client -- "HTTPS" --> Web
+    Build --> Workers
+    Rooms <--> Workers
+    Workers <--> Inference
+    Workers --> Neon
+    Workers --> Weather
+```
+
 ## How it works
 
 ```mermaid
@@ -93,9 +123,11 @@ flowchart LR
 the red-team run measures it. If the classifier times out (`GUARD_TIMEOUT_S`),
 the turn is allowed so the assistant stays usable; the rules, the prompt policy
 and the code-level checks still apply. `GUARD_MODE=rules` removes the added
-latency at the cost of catching less. With a speech-to-speech model
-(`VOICE_PROVIDER=gemini_live`) the model answers on its own, so only the
-prompt policy and the code-level checks apply.
+latency at the cost of catching less. A speech-to-speech model
+(`VOICE_PROVIDER=gemini_live`) detects turns and answers on its own, so the gate
+can't run. The agent refuses to start that way unless `ALLOW_UNGATED_REALTIME=true`
+is set, which accepts prompt-only topic guardrails (identity and storage checks
+still apply).
 
 ### Red-team evaluation
 
@@ -193,34 +225,7 @@ RUN_WEATHER_INTEGRATION=1 uv run pytest tests/test_weather_integration.py   # li
 
 Three managed services, and only the agent is a Docker image:
 
-```mermaid
-flowchart LR
-    Dev["GitHub<br/>main branch"]
-
-    subgraph Vercel
-        Web["Web app + /api/token<br/>Next.js, built by Vercel<br/>(no Docker)"]
-    end
-
-    subgraph LKC["LiveKit Cloud"]
-        Build["Agent build<br/>agent/Dockerfile"]
-        Workers["Agent workers<br/>scaled by LiveKit"]
-        Rooms["Rooms (WebRTC)"]
-        Inf["LiveKit Inference<br/>STT · LLM · TTS"]
-    end
-
-    Neon[("Neon Postgres<br/>managed")]
-    APIs["Open-Meteo / MET Norway"]
-    User(("Visitor's browser"))
-
-    Dev -- "push → auto deploy" --> Web
-    Dev -- "lk agent deploy" --> Build --> Workers
-    User -- "HTTPS" --> Web
-    User <-- "WebRTC" --> Rooms
-    Rooms <--> Workers
-    Workers <--> Inf
-    Workers --> Neon
-    Workers --> APIs
-```
+See the deployment diagram at the top.
 
 **Why this split:** the web app is a standard Next.js app, so Vercel builds and
 hosts it directly, with no image needed. The agent is a long-running Python
@@ -288,7 +293,3 @@ Every push to `main` redeploys the web app. Redeploy the agent with
 The web app started from LiveKit's
 [agent-starter-react](https://github.com/livekit-examples/agent-starter-react)
 (MIT). MET Norway data is used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-
----
-
-© 2026 [@sarahdoi](https://github.com/sarahdoi)

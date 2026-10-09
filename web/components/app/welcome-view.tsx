@@ -59,12 +59,23 @@ export const WelcomeView = ({
         </Button>
       </section>
 
-      <p className="text-muted-foreground fixed bottom-14 left-0 w-full px-4 text-center text-xs">
-        No sign-up needed{' '}
-        <span aria-hidden="true" className="whitespace-nowrap">
-          ༼ つ ╹ ╹ ༽つ
-        </span>
-      </p>
+      <footer className="text-muted-foreground fixed bottom-14 left-0 flex w-full flex-col items-center gap-1.5 px-4 text-center text-xs">
+        <p>No sign-up needed</p>
+        <p className="opacity-70">
+          © 2026 by{' '}
+          <a
+            href="https://github.com/sarahdoi"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-foreground underline-offset-2 transition-colors hover:underline"
+          >
+            @sarahdoi
+          </a>{' '}
+          <span aria-hidden="true" className="whitespace-nowrap">
+            ༼ つ ╹ ╹ ༽つ
+          </span>
+        </p>
+      </footer>
     </div>
   );
 };
