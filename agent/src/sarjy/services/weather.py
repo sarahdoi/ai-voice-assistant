@@ -16,8 +16,17 @@ class WeatherService(Protocol):
 
 
 class OpenMeteoWeatherService:
-    def __init__(self, client: httpx.AsyncClient, *, fault: bool = False) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        geocoding_url: str,
+        forecast_url: str,
+        fault: bool = False,
+    ) -> None:
         self.client = client
+        self.geocoding_url = geocoding_url
+        self.forecast_url = forecast_url
         self.fault = fault
 
     async def _get(self, url: str, params: dict) -> dict:
@@ -55,7 +64,7 @@ class OpenMeteoWeatherService:
             params = {"name": city, "count": 10, "language": "en", "format": "json"}
             if country_code:
                 params["countryCode"] = country_code.upper()
-            geocoding = await self._get("https://geocoding-api.open-meteo.com/v1/search", params)
+            geocoding = await self._get(self.geocoding_url, params)
             places = geocoding.get("results", [])
             if not places:
                 return ToolResult.failure(
@@ -83,7 +92,7 @@ class OpenMeteoWeatherService:
                 )
             place = places[0]
             forecast = await self._get(
-                "https://api.open-meteo.com/v1/forecast",
+                self.forecast_url,
                 {
                     "latitude": place["latitude"],
                     "longitude": place["longitude"],

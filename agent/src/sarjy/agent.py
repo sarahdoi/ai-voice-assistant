@@ -51,7 +51,12 @@ async def entrypoint(ctx: JobContext) -> None:
     agent = SarjyAgent(
         user_id=user_id,
         memory=memory,
-        weather=OpenMeteoWeatherService(weather_client, fault=settings.fault_weather),
+        weather=OpenMeteoWeatherService(
+            weather_client,
+            geocoding_url=str(settings.weather_geocoding_url),
+            forecast_url=str(settings.weather_forecast_url),
+            fault=settings.fault_weather,
+        ),
     )
     await session.start(
         agent=agent,
