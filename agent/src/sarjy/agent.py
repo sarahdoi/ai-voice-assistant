@@ -41,7 +41,7 @@ async def entrypoint(ctx: JobContext) -> None:
                 settings.database_url.get_secret_value(),
                 min_size=1,
                 max_size=2,
-                timeout=settings.db_timeout_s,
+                timeout=settings.db_connect_timeout_s,
                 command_timeout=settings.db_timeout_s,
             )
             ctx.add_shutdown_callback(pool.close)

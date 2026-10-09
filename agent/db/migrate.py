@@ -13,7 +13,7 @@ async def main() -> None:
     if not settings.database_url:
         raise SystemExit("Set DATABASE_URL in .env first.")
     connection = await asyncpg.connect(
-        settings.database_url.get_secret_value(), timeout=settings.db_timeout_s
+        settings.database_url.get_secret_value(), timeout=settings.db_connect_timeout_s
     )
     try:
         await connection.execute(

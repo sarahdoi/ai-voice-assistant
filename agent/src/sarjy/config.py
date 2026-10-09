@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     weather_user_agent: str = "Sarjy/0.1 github.com/sarahdoi/ai-voice-assistant"
 
     weather_timeout_s: float = 3.0
+    # Connecting may need to wake a sleeping serverless database (Neon), so it gets
+    # longer than individual queries, which should still fail fast and honestly.
+    db_connect_timeout_s: float = 10.0
     db_timeout_s: float = 2.0
 
     fault_weather: bool = False
