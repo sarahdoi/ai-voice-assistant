@@ -9,9 +9,8 @@ for the voice agent, and Neon for persistent memory.
 | --- | --- |
 | Web URL | [Live demo](https://ai-voice-assistant-pi-one.vercel.app/) |
 | Vercel project | [sarahdoi / ai-voice-assistant](https://vercel.com/sarahdoi/ai-voice-assistant) |
-| LiveKit Cloud project | Sarjy (`sarjy-a0pso6kv`) |
-| Agent ID / region | `CA_aMoDfRqNEG7a` / `us-east` |
-| Neon region | AWS US East (Ohio), `us-east-2` |
+| Voice agent | LiveKit Cloud |
+| Memory database | Neon Postgres |
 
 ## Deploy and update
 
