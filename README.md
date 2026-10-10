@@ -71,8 +71,8 @@ A call, step by step:
   and TTS models are configured independently through `STT_MODEL`, `LLM_MODEL`
   and `TTS_MODEL`, keeping memory and weather logic independent of model providers.
   Provider compatibility includes tool use and turn handling.
-  A Gemini Live adapter is also implemented, but bypasses the topic gate and is
-  blocked by default unless explicitly enabled.
+  Gemini Live is an optional speech-to-speech integration. It does not run the
+  same topic checks as the default pipeline, so it requires an explicit opt-in.
 - **Identity:** each browser gets an anonymous guest ID in an HttpOnly cookie.
   The token route turns it into the LiveKit participant identity, and the agent
   uses that identity as the memory owner. Nothing is stored per visit, only
