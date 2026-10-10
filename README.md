@@ -5,6 +5,20 @@
 A personalized voice assistant with persistent memory and weather tools.
 Talk to it in real time; no sign-up needed.
 
+## Features
+
+- **Voice conversation:** talk naturally, with live captions and microphone controls.
+- **Persistent memory:** save, update and forget facts; return from the same browser
+  to continue with remembered preferences.
+- **Weather:** current conditions and forecasts, with a secondary forecast provider
+  when the primary fails.
+- **Visible outcomes:** the memory panel reflects saved facts and changes.
+- **Guardrails:** topic checks, user-scoped memory and tool-backed answers.
+- **Appearance:** light, dark and system theme options, with an animated voice indicator.
+
+Try: “Remember my favorite color is teal,” then reconnect and ask,
+“What’s my favorite color?”
+
 ## Architecture
 
 ```mermaid
@@ -54,9 +68,12 @@ A call, step by step:
 3. Speech goes through STT → topic guardrails → LLM → TTS. The LLM calls tools for memory and
    weather, and every tool result is also sent to the UI as an event.
 
-- **Voice:** by default, speech-to-text → LLM → text-to-speech through LiveKit
-  Inference. Set `VOICE_PROVIDER` to use a realtime speech-to-speech model
-  (Gemini Live) instead.
+- **Voice providers:** the default pipeline uses LiveKit Inference. STT, LLM
+  and TTS models are configured independently through `STT_MODEL`, `LLM_MODEL`
+  and `TTS_MODEL`, keeping memory and weather logic independent of model providers.
+  Provider compatibility includes tool use and turn handling.
+  Gemini Live is an optional speech-to-speech integration. It does not run the
+  same topic checks as the default pipeline, so it requires an explicit opt-in.
 - **Identity:** each browser gets an anonymous guest ID in an HttpOnly cookie.
   The token route turns it into the LiveKit participant identity, and the agent
   uses that identity as the memory owner. Nothing is stored per visit, only
@@ -65,11 +82,13 @@ A call, step by step:
   greet a returning user by name, and the memory panel opens without waiting on
   the database. Changes are pushed to the UI as they happen.
 - **Weather:** current conditions plus today and tomorrow. If Open-Meteo times
-  out or fails, the agent falls back to MET Norway.
+  out or fails, the agent falls back to MET Norway. Weather adapters share a
+  service interface; another provider needs an adapter for its response format,
+  rather than just a different endpoint URL.
 
 ## Guardrails and reliability
 
-Each guardrail sits in code where it can, and in the prompt only where it must:
+The pipeline combines topic checks with validation in the memory and weather services:
 
 ```mermaid
 flowchart LR
@@ -81,19 +100,15 @@ flowchart LR
     Agent --> Tools[Tools]
 ```
 
-| Concern                           | What the code does                                                                                                                                                                                                                                                                                                                              |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Prohibited topics                 | A gate checks every user turn before the main LLM sees it: high-precision rules first (instant), then a separate classifier call that returns one label. A blocked turn gets a fixed, kind refusal (self-harm gets a supportive one that points to help) and never reaches the main model. The policy is also in the main model's instructions. |
-| Jailbreaks                        | The same gate labels attempts to change the rules, reveal the instructions, claim developer authority, or use role-play or hypotheticals to get around the policy. The instructions say they can't be changed by anything in the conversation.                                                                                                  |
-| Memory belongs to the right user  | The guest cookie is signed by the server (HMAC), so an ID can't be forged or reused from another browser. Tools never accept a user ID; it comes from the signed LiveKit token. Every query is scoped to it, and the memory RPC rejects any other caller. Asking for someone else's data can't work, whatever the model does.                   |
-| Stored text can't steer the model | Facts that look like instructions are refused before storage. Saved facts are placed in a fenced block, one line each, marked as data only.                                                                                                                                                                                                     |
-| No false "saved" claims           | Tools return structured results (`ok`, `error_code`). The assistant may only claim a change when `ok=true`. The UI shows the real result, not the model's words.                                                                                                                                                                                |
-| Sensitive data                    | Passwords, card numbers and ID numbers are refused before storage.                                                                                                                                                                                                                                                                              |
-| Grounded weather                  | Answers come only from tool data, with the source named. Missing values are reported as unavailable, not guessed.                                                                                                                                                                                                                               |
-| Honest failures                   | Short query timeouts. A timed-out write is reported as "couldn't confirm", then read back from storage and reported as it really is. Storage and weather failures are spoken and shown in the UI. Changes made while memory is loading (including deletions) always win over the older snapshot.                                                |
-| Nothing kept by LiveKit           | Sessions start with recording off, so no audio, transcripts or traces are stored in LiveKit Cloud.                                                                                                                                                                                                                                              |
-| Data retention                    | A guest's facts are deleted after `MEMORY_RETENTION_DAYS` (default 365) without a call, matching the one-year guest cookie. The agent runs this in the background, at most once a day.                                                                                                                                                          |
-| Fault injection                   | `FAULT_DB_WRITE=true` and `FAULT_WEATHER=true` simulate outages for demos and tests.                                                                                                                                                                                                                                                            |
+| Area | Behavior |
+| --- | --- |
+| Topics and jailbreaks | Rules and a classifier check user turns before the main LLM. Blocked turns receive a fixed refusal. |
+| Memory isolation | Signed guest identity, user-scoped queries and caller-checked memory access. |
+| Stored facts | Pattern screening and explicit separation of stored data from instructions. |
+| Tool outcomes | The UI reflects service results; uncertain writes are checked against storage. |
+| Weather | Responses use returned values and source attribution; upstream failures trigger forecast fallback. |
+| Retention | Saved facts expire after the configured period of inactivity. |
+| Fault simulation | Storage and weather failures can be simulated for testing. |
 
 **Trade-offs.** The classifier adds one short LLM call before every reply, and
 the red-team run measures it. If the classifier times out (`GUARD_TIMEOUT_S`),
@@ -126,11 +141,14 @@ You need:
 - A LiveKit Cloud project
 - A Postgres database (Neon's free tier works)
 
+Environment examples list the required LiveKit credentials, database connection
+and guest-signing secret. The agent and web app use the same LiveKit project.
+
 **Agent**
 
 ```sh
 cd agent
-cp .env.example .env        # fill in LiveKit keys and DATABASE_URL
+cp .env.example .env
 uv sync
 uv run python db/migrate.py
 uv run voice-agent dev
@@ -140,7 +158,7 @@ uv run voice-agent dev
 
 ```sh
 cd web
-cp .env.example .env.local  # same LiveKit keys
+cp .env.example .env.local
 pnpm install
 pnpm dev                    # http://localhost:3000
 ```
@@ -150,12 +168,12 @@ pnpm dev                    # http://localhost:3000
 | Variable                                           | Where         | Purpose                                                                           |
 | -------------------------------------------------- | ------------- | --------------------------------------------------------------------------------- |
 | `APP_NAME`                                         | agent         | Name the assistant introduces itself with                                         |
-| `NEXT_PUBLIC_APP_NAME`                             | web           | Name shown in the UI (build time); keep it equal to `APP_NAME`                    |
-| `AGENT_NAME`                                       | agent and web | LiveKit agent name used for dispatch; must match on both sides                    |
-| `GUEST_ID_SECRET`                                  | web           | Signs the guest cookie; at least 32 random characters (`openssl rand -base64 32`) |
+| `NEXT_PUBLIC_APP_NAME`                             | web           | UI display name (build time)                    |
+| `AGENT_NAME`                                       | agent and web | Shared agent dispatch name                    |
+| `GUEST_ID_SECRET`                                  | web           | Guest cookie signing secret (minimum 32 characters) |
 | `VOICE_PROVIDER`                                   | agent         | `livekit_pipeline` (default) or `gemini_live`                                     |
 | `STT_MODEL`, `LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE` | agent         | Models for the default pipeline                                                   |
-| `DATABASE_URL`                                     | agent         | Postgres connection string (for Neon, drop `&channel_binding=require`)            |
+| `DATABASE_URL`                                     | agent         | Postgres connection string            |
 | `DB_CONNECT_TIMEOUT_S`                             | agent         | Connect timeout; long enough for a sleeping database to wake                      |
 | `DB_TIMEOUT_S`                                     | agent         | Per-query timeout                                                                 |
 | `MEMORY_RETENTION_DAYS`                            | agent         | Days without a call before a guest's facts are deleted (`0` keeps them)           |
@@ -176,12 +194,10 @@ One table, `memories`: one row per user and fact.
 | `last_seen_at`             | Set when the user starts a call; indexed for the retention sweep.            |
 
 Migrations live in `agent/db/migrations` and are idempotent. The agent applies
-them on start, and `db/migrate.py` applies them by hand.
+them on start, and `db/migrate.py` provides a standalone migration command.
 
-**Why Postgres and not Redis with a TTL?** Memory must survive across sessions,
-so it belongs in a database, not a cache. Correcting and forgetting are each a
-single checked SQL statement ("only if it exists", "report whether it existed").
-Expiry is handled by the retention rule above.
+Postgres provides durable facts across sessions, with scoped updates and deletions.
+Retention is based on the guest's most recent call.
 
 ## Tests
 
@@ -197,7 +213,7 @@ The web app runs on **Vercel**, the voice agent on **LiveKit Cloud**, and memory
 on **Neon Postgres**. Vercel deploys from `main`; GitHub Actions tests changes
 and deploys agent updates. Token requests are rate-limited in Vercel Firewall.
 
-See [deployment setup and monitoring](docs/deployment.md) for configuration and commands.
+See the [deployment overview](docs/deployment.md) for hosting and operations.
 
 ## Limits
 
@@ -205,12 +221,18 @@ See [deployment setup and monitoring](docs/deployment.md) for configuration and 
   memory can't be carried to another device yet.
 - Weather covers today and tomorrow only.
 - No guardrail stops every jailbreak. The gate and prompt reduce the chance; the
-  red-team results show what still gets through. Identity, storage scoping and
+  evaluation exercises known attack patterns. Identity, storage scoping and
   tool results are enforced in code and don't depend on the model.
 - The topic rules are English-only; other languages rely on the classifier.
 
 ## Credits
 
-The web app started from LiveKit's
-[agent-starter-react](https://github.com/livekit-examples/agent-starter-react)
-(MIT). MET Norway data is used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [LiveKit agent-starter-react](https://github.com/livekit-examples/agent-starter-react)
+  (MIT): the frontend starting point and voice UI integration.
+- [LiveKit Agents](https://github.com/livekit/agents): voice pipeline orchestration.
+- [next-themes](https://github.com/pacocoursey/next-themes): light, dark and system themes.
+- [Motion](https://github.com/motiondivision/motion): interface animations.
+- [Phosphor Icons](https://github.com/phosphor-icons/react): interface icons.
+- [Open-Meteo](https://open-meteo.com/): primary weather data.
+- [MET Norway](https://www.met.no/): fallback forecast data, used under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

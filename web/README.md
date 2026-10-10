@@ -13,4 +13,9 @@ pnpm dev                     # http://localhost:3000
   and dispatches the agent. The identity is decided here, never by the client.
 - `lib/app-config.ts` holds the display name (`NEXT_PUBLIC_APP_NAME`).
 
-Before pushing, run `pnpm lint` and `pnpm build`.
+## Checks
+
+```sh
+pnpm lint
+pnpm build
+```

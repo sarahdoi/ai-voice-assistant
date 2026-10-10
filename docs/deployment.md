@@ -1,52 +1,23 @@
-# Deployment
+# Deployment overview
 
-Sarjy runs on three managed services: Vercel for the web app, LiveKit Cloud
-for the voice agent, and Neon for persistent memory.
+[Open Sarjy](https://ai-voice-assistant-pi-one.vercel.app/)
 
-## Live configuration
+## Hosting
 
-| What | Value |
-| --- | --- |
-| Web URL | [Live demo](https://ai-voice-assistant-pi-one.vercel.app/) |
-| Vercel project | [sarahdoi / ai-voice-assistant](https://vercel.com/sarahdoi/ai-voice-assistant) |
-| Voice agent | LiveKit Cloud |
-| Memory database | Neon Postgres |
+| Component | Platform | Role |
+| --- | --- | --- |
+| Web app | Vercel | Interface and session tokens |
+| Voice agent | LiveKit Cloud | Audio sessions, reasoning and tools |
+| Memory | Neon Postgres | Saved facts across visits |
 
-## Deploy and update
+## Updates
 
-- **Web:** Vercel builds `web/` with Node 24 and deploys changes from `main`.
-- **Agent:** GitHub Actions checks the code and deploys agent changes from
-  `main` to the existing LiveKit deployment. Manual updates use `lk agent deploy`.
-- **Database:** migrations run when the agent starts. To apply them manually,
-  run `uv run python db/migrate.py` from `agent/`.
+Vercel deploys the web app from `main`. GitHub Actions runs backend tests and
+frontend checks, then deploys agent changes to LiveKit Cloud. Database
+migrations run when the agent starts.
 
-For the first agent deployment, authenticate with `lk cloud auth`, then run
-from `agent/`:
+## Operations
 
-```sh
-lk agent create --secrets-file .env --ignore-empty-secrets
-```
-
-Commit `agent/livekit.toml`; keep environment files and credentials private.
-
-## Configuration
-
-Vercel needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
-`AGENT_NAME`, `NEXT_PUBLIC_APP_NAME` and `GUEST_ID_SECRET`.
-The agent's runtime configuration and database credentials live in LiveKit Cloud.
-
-GitHub Actions needs repository secrets `LIVEKIT_URL`, `LIVEKIT_API_KEY` and
-`LIVEKIT_API_SECRET`. Require **Backend checks** and **Frontend checks** in
-branch rules to block merges when checks fail.
-
-## Monitoring and protection
-
-From `agent/`, inspect cloud worker logs:
-
-```sh
-lk agent logs
-```
-
-Vercel Firewall limits `POST /api/token` to 10 requests per 60 seconds per IP,
-returning 429 when exceeded. This limits new session requests, not active calls.
-The rule is configured in Vercel and needs a live check.
+Agent logs are available through LiveKit Cloud and `lk agent logs`.
+Vercel Firewall limits new session requests to 10 per minute per IP;
+excess requests receive HTTP 429. This does not limit active call duration.
