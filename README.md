@@ -67,9 +67,12 @@ A call, step by step:
 3. Speech goes through STT → topic guardrails → LLM → TTS. The LLM calls tools for memory and
    weather, and every tool result is also sent to the UI as an event.
 
-- **Voice:** by default, speech-to-text → LLM → text-to-speech through LiveKit
-  Inference. Set `VOICE_PROVIDER` to use a realtime speech-to-speech model
-  (Gemini Live) instead.
+- **Voice providers:** the default pipeline uses LiveKit Inference. STT, LLM
+  and TTS models are configured independently through `STT_MODEL`, `LLM_MODEL`
+  and `TTS_MODEL`, keeping memory and weather logic independent of model providers.
+  Alternatives must be supported by LiveKit and tested for tool use and turn handling.
+  A Gemini Live adapter is also implemented, but bypasses the topic gate and is
+  blocked by default unless explicitly enabled. Deepgram cascade is not implemented.
 - **Identity:** each browser gets an anonymous guest ID in an HttpOnly cookie.
   The token route turns it into the LiveKit participant identity, and the agent
   uses that identity as the memory owner. Nothing is stored per visit, only
@@ -78,7 +81,9 @@ A call, step by step:
   greet a returning user by name, and the memory panel opens without waiting on
   the database. Changes are pushed to the UI as they happen.
 - **Weather:** current conditions plus today and tomorrow. If Open-Meteo times
-  out or fails, the agent falls back to MET Norway.
+  out or fails, the agent falls back to MET Norway. Weather adapters share a
+  service interface; another provider needs an adapter for its response format,
+  rather than just a different endpoint URL.
 
 ## Guardrails and reliability
 
