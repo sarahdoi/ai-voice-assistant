@@ -5,71 +5,44 @@
 A personalized voice assistant with persistent memory and weather tools.
 Talk to it in real time; no sign-up needed.
 
-## Deployment architecture
+## Architecture
 
 ```mermaid
 flowchart LR
-    GH["GitHub<br/>main branch"]
-    Client(("Client"))
+    GH["GitHub · main"] --> Actions["GitHub Actions"]
+    GH -- "Auto deploy" --> Web["Web app · Vercel"]
+    Actions -- "Deploy" --> Agent
+    Client["Web client"] -- "HTTPS" --> Web
 
-    subgraph LKC["LiveKit Cloud"]
-        Build["Agent build<br/>agent/Dockerfile"]
-        Rooms["Rooms (WebRTC)"]
-        Workers["Agent workers<br/>scaled by LiveKit"]
-        Inference["LiveKit Inference<br/>STT · LLM · TTS"]
+    subgraph Cloud["LiveKit Cloud"]
+        subgraph Agent["Python agent"]
+            Guard["Guardrails"]
+            MemoryService["Memory"]
+            WeatherService["Weather"]
+        end
+        subgraph Inference["LiveKit Inference"]
+            STT["STT"]
+            LLM["LLM"]
+            TTS["TTS"]
+        end
+        Agent --> STT --> Guard
+        Guard -- "Proceed" --> LLM
+        Guard -- "Refusal" --> TTS
+        LLM --> TTS --> Agent
+        LLM -- "Call" --> MemoryService
+        MemoryService -- "Result" --> LLM
+        LLM -- "Call" --> WeatherService
+        WeatherService -- "Result" --> LLM
     end
 
-    subgraph Vercel
-        Web["Web app<br/>/api/token"]
-    end
-
-    Neon[("Neon Postgres<br/>managed")]
-    Weather["Open-Meteo / MET Norway"]
-
-    GH --> Checks["GitHub Actions<br/>backend and frontend checks"]
-    Checks -- "LiveKit deploy action" --> Build
-    GH -- "Git integration: push to main" --> Web
-    Client <-- "WebRTC" --> Rooms
-    Client -- "HTTPS" --> Web
-    Build --> Workers
-    Rooms <--> Workers
-    Workers <--> Inference
-    Workers --> Neon
-    Workers --> Weather
+    Client <-- "WebRTC" --> Agent
+    MemoryService <--> Memory[("Postgres")]
+    WeatherService <--> Weather["Open-Meteo"]
+    WeatherService -. "Failure" .-> Fallback["MET Norway"]
+    Fallback --> WeatherService
 ```
 
 ## How it works
-
-```mermaid
-flowchart LR
-    subgraph Browser
-        UI["Web app<br/>Next.js · React · Tailwind<br/>LiveKit Components"]
-    end
-
-    subgraph Vercel
-        Token["/api/token<br/>guest cookie → identity<br/>livekit-server-sdk"]
-    end
-
-    subgraph LiveKit["LiveKit Cloud"]
-        SFU["Room<br/>WebRTC audio, data channel, RPC"]
-        Agent["Agent worker<br/>Python · LiveKit Agents"]
-        Inference["LiveKit Inference<br/>STT: AssemblyAI · LLM: Gemma · TTS: Fish Audio<br/>(or Gemini Live, speech-to-speech)"]
-    end
-
-    DB[("Neon Postgres<br/>memories (user_id, key, value)<br/>asyncpg")]
-    Weather["Open-Meteo<br/>geocoding + forecast"]
-    Fallback["MET Norway<br/>fallback forecast"]
-
-    UI -- "1. POST (HttpOnly cookie)" --> Token
-    Token -- "2. signed token + agent dispatch" --> UI
-    UI <-- "3. voice over WebRTC" --> SFU
-    SFU <--> Agent
-    Agent <-- "speech ↔ text" --> Inference
-    Agent -- "remember / recall / correct / forget" --> DB
-    Agent -- "get_weather" --> Weather
-    Agent -. "on timeout or error" .-> Fallback
-    Agent -- "events: tool_started, tool_finished, memory_changed<br/>RPC: memory snapshot" --> SFU
-```
 
 A call, step by step:
 
@@ -78,7 +51,7 @@ A call, step by step:
    the agent.
 2. The browser joins a LiveKit room. The agent joins the same room, reads the
    user's identity from the token and loads their saved facts.
-3. Speech goes through STT → LLM → TTS. The LLM calls tools for memory and
+3. Speech goes through STT → topic guardrails → LLM → TTS. The LLM calls tools for memory and
    weather, and every tool result is also sent to the UI as an event.
 
 - **Voice:** by default, speech-to-text → LLM → text-to-speech through LiveKit
@@ -100,14 +73,12 @@ Each guardrail sits in code where it can, and in the prompt only where it must:
 
 ```mermaid
 flowchart LR
-    U["User turn<br/>(transcribed)"] --> R{"Rules<br/>instant patterns"}
-    R -- match --> Refuse["Fixed refusal<br/>spoken; UI told the category"]
-    R -- no match --> C{"Classifier<br/>separate LLM call, one label"}
-    C -- prohibited or jailbreak --> Refuse
-    C -- allowed, or timeout (fail open) --> M["Main LLM<br/>with policy in its instructions"]
-    M --> T["Tools<br/>user ID bound from token,<br/>validated, structured results"]
-    T --> DB[("Memory")]
-    T --> W["Weather"]
+    User[User message] --> Rules[Rules]
+    Rules --> Classifier[Classifier]
+    Rules --> Refusal[Refusal]
+    Classifier --> Refusal
+    Classifier -->|Allowed or unavailable| Agent[Assistant]
+    Agent --> Tools[Tools]
 ```
 
 | Concern                           | What the code does                                                                                                                                                                                                                                                                                                                              |
@@ -136,21 +107,15 @@ still apply).
 
 ### Red-team evaluation
 
-`agent/evals` holds 27 cases: prohibited topics, jailbreaks (role-play, false
-authority, fiction framing, prompt leaks, non-English, obfuscated text), memory
-injection and cross-user access, tool outages, and everyday requests that must
-**not** be refused. Each case runs through the gate and the real agent (text in,
-text out, with simulated outages), and is graded by code checks where possible
-and an LLM judge otherwise.
+The evaluation in `agent/evals` covers prohibited requests, jailbreak attempts,
+memory isolation, tool outages and harmless requests. It checks the topic gate
+and agent responses using text input, simulated services and a mix of code
+checks and an LLM judge. It does not test live audio or deployed infrastructure.
 
 ```sh
 cd agent
-uv run python evals/redteam.py                       # all cases → evals/results.md
-GUARD_MODE=rules uv run python evals/redteam.py      # compare: rules only
-uv run python evals/redteam.py J1 J5                 # selected cases
+uv run python evals/redteam.py
 ```
-
-Results: [`agent/evals/results.md`](agent/evals/results.md).
 
 ## Run locally
 
