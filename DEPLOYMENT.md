@@ -51,7 +51,3 @@ lk agent logs
 Vercel Firewall limits `POST /api/token` to 10 requests per 60 seconds per IP,
 returning 429 when exceeded. This limits new session requests, not active calls.
 The rule is configured in Vercel and needs a live check.
-
-After deployment, verify voice, memory across reconnects, weather with source
-attribution, and a guardrail refusal from the public demo. Confirm session
-recording is disabled in LiveKit.

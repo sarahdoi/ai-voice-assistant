@@ -41,6 +41,7 @@ const commitMono = localFont({
 
 export const metadata: Metadata = {
   title: APP_NAME,
+  description: 'Personalized AI assistant.',
 };
 
 interface RootLayoutProps {

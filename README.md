@@ -26,7 +26,8 @@ flowchart LR
     Neon[("Neon Postgres<br/>managed")]
     Weather["Open-Meteo / MET Norway"]
 
-    GH -- "lk agent deploy (CLI)" --> Build
+    GH --> Checks["GitHub Actions<br/>backend and frontend checks"]
+    Checks -- "LiveKit deploy action" --> Build
     GH -- "Git integration: push to main" --> Web
     Client <-- "WebRTC" --> Rooms
     Client -- "HTTPS" --> Web
