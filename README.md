@@ -232,7 +232,7 @@ The web app runs on **Vercel**, the voice agent on **LiveKit Cloud**, and memory
 on **Neon Postgres**. Vercel deploys from `main`; GitHub Actions tests changes
 and deploys agent updates. Token requests are rate-limited in Vercel Firewall.
 
-See [deployment setup and monitoring](DEPLOYMENT.md) for configuration and commands.
+See [deployment setup and monitoring](docs/deployment.md) for configuration and commands.
 
 ## Limits
 
