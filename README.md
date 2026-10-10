@@ -86,7 +86,7 @@ A call, step by step:
   service interface; another provider needs an adapter for its response format,
   rather than just a different endpoint URL.
 
-## Guardrails and reliability
+## Safeguards
 
 The pipeline combines topic checks with validation in the memory and weather services:
 
@@ -100,15 +100,15 @@ flowchart LR
     Agent --> Tools[Tools]
 ```
 
-| Area | Behavior |
+| Concern | Safeguard |
 | --- | --- |
 | Topics and jailbreaks | Rules and a classifier check user turns before the main LLM. Blocked turns receive a fixed refusal. |
 | Memory isolation | Signed guest identity, user-scoped queries and caller-checked memory access. |
 | Stored facts | Pattern screening and explicit separation of stored data from instructions. |
 | Tool outcomes | The UI reflects service results; uncertain writes are checked against storage. |
 | Weather | Responses use returned values and source attribution; upstream failures trigger forecast fallback. |
+| Session recording | Agent sessions start with recording disabled. |
 | Retention | Saved facts expire after the configured period of inactivity. |
-| Fault simulation | Storage and weather failures can be simulated for testing. |
 
 **Trade-offs.** The classifier adds one short LLM call before every reply, and
 the red-team run measures it. If the classifier times out (`GUARD_TIMEOUT_S`),
@@ -200,6 +200,9 @@ Postgres provides durable facts across sessions, with scoped updates and deletio
 Retention is based on the guest's most recent call.
 
 ## Tests
+
+Set `FAULT_DB_WRITE=true` to simulate storage write failures or `FAULT_WEATHER=true`
+to simulate primary weather failures and test forecast fallback.
 
 ```sh
 cd agent
