@@ -1,7 +1,11 @@
 # Voice Assistant with Memory
 
-A browser voice assistant that remembers what you tell it across visits and can
-check the weather. Talk to it in real time; no sign-up needed.
+[Live demo](https://ai-voice-assistant-pi-one.vercel.app/)
+
+A personalized voice assistant with persistent memory and weather tools.
+Talk to it in real time; no sign-up needed.
+
+## Deployment architecture
 
 ```mermaid
 flowchart LR
@@ -22,8 +26,9 @@ flowchart LR
     Neon[("Neon Postgres<br/>managed")]
     Weather["Open-Meteo / MET Norway"]
 
-    GH -- "LK agent deploy" --> Build
-    GH -- "push > auto deploy" --> Web
+    GH --> Checks["GitHub Actions<br/>backend and frontend checks"]
+    Checks -- "LiveKit deploy action" --> Build
+    GH -- "Git integration: push to main" --> Web
     Client <-- "WebRTC" --> Rooms
     Client -- "HTTPS" --> Web
     Build --> Workers
@@ -221,62 +226,13 @@ uv run pytest
 RUN_WEATHER_INTEGRATION=1 uv run pytest tests/test_weather_integration.py   # live weather APIs
 ```
 
-## Deploy
+## Deployment
 
-Three managed services, and only the agent is a Docker image:
+The web app runs on **Vercel**, the voice agent on **LiveKit Cloud**, and memory
+on **Neon Postgres**. Vercel deploys from `main`; GitHub Actions tests changes
+and deploys agent updates. Token requests are rate-limited in Vercel Firewall.
 
-See the deployment diagram at the top.
-
-**Why this split:** the web app is a standard Next.js app, so Vercel builds and
-hosts it directly, with no image needed. The agent is a long-running Python
-worker that keeps live audio connections open, which serverless platforms
-don't support. LiveKit Cloud builds `agent/Dockerfile` and runs and scales
-those workers next to the rooms they serve.
-
-### 1. Database (once)
-
-Create a Neon project in the same region as the agent, then apply the
-migrations. The agent also applies them on start.
-
-```sh
-cd agent && uv run python db/migrate.py
-```
-
-### 2. Agent → LiveKit Cloud
-
-Install the [LiveKit CLI](https://docs.livekit.io/home/cli/) and sign in with
-`lk cloud auth`. Then:
-
-```sh
-cd agent
-lk agent create --secrets-file .env   # first time: builds the Dockerfile, writes livekit.toml
-lk agent deploy                       # later updates
-lk agent logs                         # check it started
-```
-
-The secrets file must include `DATABASE_URL` and the `APP_NAME` and
-`AGENT_NAME` values. Commit the generated `livekit.toml`; never commit `.env`.
-
-### 3. Web → Vercel
-
-Import the repository in Vercel, set **Root Directory** to `web`, and add the
-environment variables:
-
-| Variable                                               | Value                                                                                       |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Same LiveKit project as the agent                                                           |
-| `AGENT_NAME`                                           | Same as the agent's `AGENT_NAME`                                                            |
-| `NEXT_PUBLIC_APP_NAME`                                 | Same as the agent's `APP_NAME`                                                              |
-| `GUEST_ID_SECRET`                                      | A new random secret (`openssl rand -base64 32`); changing it starts everyone as a new guest |
-
-Every push to `main` redeploys the web app. Redeploy the agent with
-`lk agent deploy`.
-
-### 4. Check before sharing the link
-
-- Open the Vercel URL, start a call, save a fact, refresh, and confirm it's remembered.
-- In the LiveKit Cloud dashboard, confirm recording and session transcripts are off,
-  so voice and conversations aren't kept.
+See [deployment setup and monitoring](docs/deployment.md) for configuration and commands.
 
 ## Limits
 
