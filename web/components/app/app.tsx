@@ -13,6 +13,10 @@ import { useDebugMode } from '@/hooks/useDebug';
 
 const IN_DEVELOPMENT = process.env.NODE_ENV !== 'production';
 
+// On LiveKit Cloud's free plan an idle agent sleeps and needs a while to wake.
+// Wait long enough for that (the status pill says it is waking) before failing.
+const AGENT_JOIN_TIMEOUT_MS = 60_000;
+
 function AppSetup() {
   useDebugMode({ enabled: IN_DEVELOPMENT });
   useAgentErrors();
@@ -28,7 +32,10 @@ interface AppProps {
 export function App({ tokenEndpoint, agentName }: AppProps) {
   const tokenSource = useMemo(() => TokenSource.endpoint(tokenEndpoint), [tokenEndpoint]);
 
-  const session = useSession(tokenSource, agentName ? { agentName } : undefined);
+  const session = useSession(tokenSource, {
+    ...(agentName ? { agentName } : {}),
+    agentConnectTimeoutMilliseconds: AGENT_JOIN_TIMEOUT_MS,
+  });
 
   return (
     <AgentSessionProvider session={session}>
