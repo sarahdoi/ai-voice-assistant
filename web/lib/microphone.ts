@@ -4,9 +4,11 @@ import { APP_NAME } from '@/lib/app-config';
  * Ask for the microphone before a call starts, so a blocked or missing mic gets
  * a clear message instead of a crash. The test stream is closed immediately.
  */
-export type MicrophoneStatus = 'ok' | 'blocked' | 'missing' | 'unavailable';
+export type MicrophoneStatus = 'ok' | 'blocked' | 'missing' | 'unavailable' | 'insecure';
 
 export async function checkMicrophone(): Promise<MicrophoneStatus> {
+  // Browsers only allow the microphone on https pages (or localhost).
+  if (!window.isSecureContext) return 'insecure';
   if (!navigator.mediaDevices?.getUserMedia) return 'unavailable';
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -35,6 +37,10 @@ export const MICROPHONE_MESSAGES: Record<
   missing: {
     title: 'No microphone found',
     description: 'Connect a microphone or headset, then try again.',
+  },
+  insecure: {
+    title: 'Microphone needs a secure connection',
+    description: `Open ${APP_NAME} with an https:// address to use your microphone.`,
   },
   unavailable: {
     title: 'Microphone isn’t available',

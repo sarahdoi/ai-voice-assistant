@@ -36,6 +36,17 @@ const START_FAILED: Problem = {
   description: `${APP_NAME} may be busy or offline. Please try again in a moment.`,
 };
 
+const TOO_MANY_TRIES: Problem = {
+  title: 'Too many tries',
+  description: 'Wait a minute, then try again.',
+};
+
+/** The token endpoint's HTTP status, read from the SDK's error message. */
+function tokenStatus(error: unknown): number | null {
+  const match = error instanceof Error ? /received (\d{3})/.exec(error.message) : null;
+  return match ? Number(match[1]) : null;
+}
+
 export function ViewController() {
   const { isConnected, start } = useSessionContext();
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -53,6 +64,10 @@ export function ViewController() {
       }
       await start();
     } catch (error) {
+      if (tokenStatus(error) === 429) {
+        setProblem(TOO_MANY_TRIES); // the Vercel firewall rate limit
+        return;
+      }
       const mic = microphoneErrorStatus(error);
       setProblem(mic === 'unavailable' ? START_FAILED : MICROPHONE_MESSAGES[mic]);
     } finally {
