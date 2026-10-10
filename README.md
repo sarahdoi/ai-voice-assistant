@@ -14,6 +14,7 @@ Talk to it in real time; no sign-up needed.
   when the primary fails.
 - **Visible outcomes:** the memory panel reflects saved facts and changes.
 - **Guardrails:** topic checks, user-scoped memory and tool-backed answers.
+- **Appearance:** light, dark and system theme options, with an animated voice indicator.
 
 Try: “Remember my favorite color is teal,” then reconnect and ask,
 “What’s my favorite color?”
@@ -226,6 +227,12 @@ See the [deployment overview](docs/deployment.md) for hosting and operations.
 
 ## Credits
 
-The web app started from LiveKit's
-[agent-starter-react](https://github.com/livekit-examples/agent-starter-react)
-(MIT). MET Norway data is used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [LiveKit agent-starter-react](https://github.com/livekit-examples/agent-starter-react)
+  (MIT): the frontend starting point and voice UI integration.
+- [LiveKit Agents](https://github.com/livekit/agents): voice pipeline orchestration.
+- [next-themes](https://github.com/pacocoursey/next-themes): light, dark and system themes.
+- [Motion](https://github.com/motiondivision/motion): interface animations.
+- [Phosphor Icons](https://github.com/phosphor-icons/react): interface icons.
+- [Open-Meteo](https://open-meteo.com/): primary weather data.
+- [MET Norway](https://www.met.no/): fallback forecast data, used under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
