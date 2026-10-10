@@ -5,6 +5,19 @@
 A personalized voice assistant with persistent memory and weather tools.
 Talk to it in real time; no sign-up needed.
 
+## Features
+
+- **Voice conversation:** talk naturally, with live captions and microphone controls.
+- **Persistent memory:** save, update and forget facts; return from the same browser
+  to continue with remembered preferences.
+- **Weather:** current conditions and forecasts, with a secondary forecast provider
+  when the primary fails.
+- **Visible outcomes:** the memory panel reflects saved facts and changes.
+- **Guardrails:** topic checks, user-scoped memory and tool-backed answers.
+
+Try: “Remember my favorite color is teal,” then reconnect and ask,
+“What’s my favorite color?”
+
 ## Architecture
 
 ```mermaid
